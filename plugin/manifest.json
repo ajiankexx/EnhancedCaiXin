@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Enhanced CaiXin",
+  "version": "0.1.0",
+  "description": "财新文章保存与当前文章上下文大模型对话工具。",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.caixin.com/*",
+    "http://127.0.0.1:*/*",
+    "http://localhost:*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.caixin.com/*"
+      ],
+      "js": [
+        "shared/defaultConfig.js",
+        "shared/articleExtractor.js",
+        "save-to-mysql/saveArticle.js",
+        "ai-chat-sidebar/chatSidebar.js",
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
