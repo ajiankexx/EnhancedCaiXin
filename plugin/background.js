@@ -1,5 +1,5 @@
 const DEFAULTS = {
-  articleSaveEndpoint: "http://127.0.0.1:8080/api/articles",
+  articleSaveEndpoint: "http://127.0.0.1:1234/api/articles",
   chatApiEndpoint: "",
   chatApiKey: "",
   chatModel: "gpt-4o-mini",
@@ -14,12 +14,11 @@ async function getSettings() {
 
 async function saveArticle(article) {
   const settings = await getSettings();
-  const response = await fetch(settings.articleSaveEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(article)
+  const request = buildSaveArticleRequest(settings, article);
+  const response = await fetch(request.endpoint, {
+    method: request.method,
+    headers: request.headers,
+    body: JSON.stringify(request.body)
   });
 
   const text = await response.text();
@@ -32,6 +31,65 @@ async function saveArticle(article) {
   } catch (_error) {
     return { ok: true, message: text || "保存成功" };
   }
+}
+
+function buildSaveArticleRequest(settings, article) {
+  if (!settings.articleSaveEndpoint) {
+    throw new Error("请先在插件设置中填写文章保存接口。");
+  }
+
+  return {
+    endpoint: settings.articleSaveEndpoint,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: article || {}
+  };
+}
+
+async function debugSaveArticleRequest(request) {
+  const settings = await getSettings();
+  const normalizedRequest = request && typeof request === "object"
+    ? request
+    : buildSaveArticleRequest(settings, {});
+  const endpoint = normalizedRequest.endpoint || settings.articleSaveEndpoint;
+  const method = normalizedRequest.method || "POST";
+  const headers = normalizedRequest.headers && typeof normalizedRequest.headers === "object"
+    ? normalizedRequest.headers
+    : { "Content-Type": "application/json" };
+
+  if (!endpoint) {
+    throw new Error("请先在插件设置中填写文章保存接口。");
+  }
+
+  const startedAt = Date.now();
+  const response = await fetch(endpoint, {
+    method,
+    headers,
+    body: typeof normalizedRequest.body === "string"
+      ? normalizedRequest.body
+      : JSON.stringify(normalizedRequest.body || {})
+  });
+  const rawText = await response.text();
+  let parsedBody = null;
+  try {
+    parsedBody = JSON.parse(rawText);
+  } catch (_error) {
+    parsedBody = rawText;
+  }
+
+  return {
+    ok: response.ok,
+    endpoint,
+    method,
+    status: response.status,
+    statusText: response.statusText,
+    elapsedMs: Date.now() - startedAt,
+    headers: Object.fromEntries(response.headers.entries()),
+    body: parsedBody,
+    rawText
+  };
 }
 
 function buildChatRequest(settings, messages, article) {
@@ -152,6 +210,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
     if (message.type === "SAVE_ARTICLE") {
       return saveArticle(message.article);
+    }
+    if (message.type === "BUILD_SAVE_ARTICLE_REQUEST") {
+      const settings = await getSettings();
+      return buildSaveArticleRequest(settings, message.article || {});
+    }
+    if (message.type === "DEBUG_SAVE_ARTICLE_REQUEST") {
+      return debugSaveArticleRequest(message.request);
     }
     if (message.type === "CHAT_WITH_ARTICLE") {
       return sendChat(message.messages || [], message.article || {});

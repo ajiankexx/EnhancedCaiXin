@@ -38,6 +38,40 @@
       .trim();
   }
 
+  function isAiSummaryNotice(text) {
+    const normalized = normalizeText(text);
+    return normalized.includes("本文由第三方AI基于财新文章")
+      && normalized.includes("提炼总结而成")
+      && normalized.includes("可能与原文真实意图存在偏差")
+      && normalized.includes("不代表财新观点和立场")
+      && normalized.includes("推荐点击链接阅读原文细致比对和校验");
+  }
+
+  function dropLeadingAiSummaryNotice(paragraphs) {
+    if (paragraphs.length === 0 || !isAiSummaryNotice(paragraphs[0])) {
+      return paragraphs;
+    }
+    return paragraphs.slice(1);
+  }
+
+  function dropLeadingAiSummaryNoticeFromText(text) {
+    const normalized = normalizeText(text);
+    if (!isAiSummaryNotice(normalized)) {
+      return normalized;
+    }
+    const paragraphs = normalized.split(/\n{2,}/).filter(Boolean);
+    const filteredParagraphs = dropLeadingAiSummaryNotice(paragraphs);
+    if (filteredParagraphs.length > 0) {
+      return filteredParagraphs.join("\n\n");
+    }
+
+    const noticeEnd = normalized.indexOf("推荐点击链接阅读原文细致比对和校验");
+    if (noticeEnd < 0) {
+      return normalized;
+    }
+    return normalizeText(normalized.slice(noticeEnd + "推荐点击链接阅读原文细致比对和校验".length));
+  }
+
   function textFromSelector(selectors) {
     for (const selector of selectors) {
       const element = document.querySelector(selector);
@@ -75,9 +109,10 @@
       const paragraphs = Array.from(element.querySelectorAll("p"))
         .map((node) => normalizeText(node.textContent))
         .filter(Boolean);
-      const text = paragraphs.length >= 2
-        ? paragraphs.join("\n\n")
-        : normalizeText(element.textContent);
+      const filteredParagraphs = dropLeadingAiSummaryNotice(paragraphs);
+      const text = paragraphs.length > 0
+        ? filteredParagraphs.join("\n\n")
+        : dropLeadingAiSummaryNoticeFromText(element.textContent);
       if (text.length > 80) {
         return text;
       }
@@ -86,7 +121,7 @@
     const fallbackParagraphs = Array.from(document.querySelectorAll("p"))
       .map((node) => normalizeText(node.textContent))
       .filter((text) => text.length > 20);
-    return fallbackParagraphs.join("\n\n");
+    return dropLeadingAiSummaryNotice(fallbackParagraphs).join("\n\n");
   }
 
   function extractPublishTime() {
@@ -139,12 +174,7 @@
       catagory: metaContent("article:section") || textFromSelector(CATEGORY_SELECTORS) || null,
       publish_time: extractPublishTime(),
       content: body,
-      summary: description,
-      reserved_1: body,
-      reserved_2: description,
-      reserved_3: document.title,
-      reserved_4: location.hostname,
-      reserved_5: new Date().toISOString()
+      summary: description
     };
   }
 

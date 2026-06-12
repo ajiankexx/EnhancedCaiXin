@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,26 +17,32 @@ import (
 
 func main() {
 	cfg := config.FromEnv()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
 
 	db, err := database.Open(cfg)
 	if err != nil {
-		log.Fatalf("open database: %v", err)
+		logger.Error("open database failed", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	if err := db.PingContext(context.Background()); err != nil {
-		log.Fatalf("ping database: %v", err)
+		logger.Error("ping database failed", "error", err)
+		os.Exit(1)
 	}
+	logger.Info("database connected")
 
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewServer(database.NewArticleStore(db)),
+		Handler:           httpapi.NewServer(database.NewArticleStore(db), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("server listening on http://%s", cfg.Addr)
+		logger.Info("server listening", "addr", cfg.Addr, "url", "http://"+cfg.Addr)
 		errCh <- server.ListenAndServe()
 	}()
 
@@ -46,14 +52,17 @@ func main() {
 	select {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("serve: %v", err)
+			logger.Error("serve failed", "error", err)
+			os.Exit(1)
 		}
 	case sig := <-signalCh:
-		log.Printf("received %s, shutting down", sig)
+		logger.Info("shutdown signal received", "signal", sig.String())
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
-			log.Fatalf("shutdown: %v", err)
+			logger.Error("shutdown failed", "error", err)
+			os.Exit(1)
 		}
+		logger.Info("server stopped")
 	}
 }

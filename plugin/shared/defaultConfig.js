@@ -1,6 +1,6 @@
 (function () {
   window.EnhancedCaiXinDefaults = {
-    articleSaveEndpoint: "http://127.0.0.1:8080/api/articles",
+    articleSaveEndpoint: "http://127.0.0.1:1234/api/articles",
     chatApiEndpoint: "",
     chatApiKey: "",
     chatModel: "gpt-4o-mini",

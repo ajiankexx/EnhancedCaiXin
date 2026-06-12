@@ -78,6 +78,44 @@
     await saveSettingsFromForm(event.currentTarget, true);
   }
 
+  async function buildSaveDebugRequest(panel) {
+    const form = getSettingsForm(panel);
+    const output = panel.querySelector("[data-ecx-save-debug-response]");
+    output.textContent = "正在生成保存文章请求...";
+    await saveSettingsFromForm(form, false);
+
+    try {
+      const article = window.EnhancedCaiXinArticleExtractor.extractCurrentArticle();
+      const request = await sendMessage({
+        type: "BUILD_SAVE_ARTICLE_REQUEST",
+        article
+      });
+      panel.querySelector("[data-ecx-save-debug-request]").value = formatJson(request);
+      output.textContent = "保存文章请求已生成，可修改 endpoint、headers 或 body 后发送。";
+    } catch (error) {
+      output.textContent = error.message || String(error);
+    }
+  }
+
+  async function sendSaveDebugRequest(panel) {
+    const output = panel.querySelector("[data-ecx-save-debug-response]");
+    output.textContent = "正在发送保存文章调试请求...";
+
+    try {
+      const requestText = panel.querySelector("[data-ecx-save-debug-request]").value.trim();
+      const request = requestText ? JSON.parse(requestText) : {};
+      const response = await sendMessage({
+        type: "DEBUG_SAVE_ARTICLE_REQUEST",
+        request
+      });
+      output.textContent = formatJson(response);
+      setStatus(response.ok ? "保存文章接口调试请求成功。" : `保存文章接口返回 HTTP ${response.status}。`, response.ok ? "success" : "error");
+    } catch (error) {
+      output.textContent = error.message || String(error);
+      setStatus(error.message || String(error), "error");
+    }
+  }
+
   async function buildDebugRequest(panel) {
     const form = getSettingsForm(panel);
     const output = panel.querySelector("[data-ecx-debug-response]");
@@ -216,7 +254,7 @@
           <form data-ecx-settings-form>
             <label>
               <span>文章保存接口</span>
-              <input name="articleSaveEndpoint" type="url" placeholder="http://127.0.0.1:8080/api/articles">
+              <input name="articleSaveEndpoint" type="url" placeholder="http://127.0.0.1:1234/api/articles">
             </label>
             <label>
               <span>大模型 API 地址</span>
@@ -238,6 +276,21 @@
             </div>
             <button type="submit">保存设置</button>
           </form>
+          <div class="ecx-debugger">
+            <div class="ecx-debugger-title">文章保存接口调试</div>
+            <label>
+              <span>完整请求，可编辑 JSON</span>
+              <textarea data-ecx-save-debug-request rows="12" spellcheck="false"></textarea>
+            </label>
+            <div class="ecx-debugger-actions">
+              <button type="button" data-ecx-build-save-debug-request>生成保存请求</button>
+              <button type="button" data-ecx-send-save-debug-request>发送保存请求</button>
+            </div>
+            <label>
+              <span>保存接口响应</span>
+              <pre data-ecx-save-debug-response>尚未发送保存文章调试请求。</pre>
+            </label>
+          </div>
           <div class="ecx-debugger">
             <div class="ecx-debugger-title">大模型接口调试</div>
             <label>
@@ -280,6 +333,12 @@
       }
     });
     panel.querySelector("[data-ecx-settings-form]").addEventListener("submit", saveSettings);
+    panel.querySelector("[data-ecx-build-save-debug-request]").addEventListener("click", () => {
+      buildSaveDebugRequest(panel);
+    });
+    panel.querySelector("[data-ecx-send-save-debug-request]").addEventListener("click", () => {
+      sendSaveDebugRequest(panel);
+    });
     panel.querySelector("[data-ecx-build-debug-request]").addEventListener("click", () => {
       buildDebugRequest(panel);
     });

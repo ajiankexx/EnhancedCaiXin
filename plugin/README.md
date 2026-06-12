@@ -17,7 +17,7 @@
 默认接口：
 
 ```text
-POST http://127.0.0.1:8080/api/articles
+POST http://127.0.0.1:1234/api/articles
 Content-Type: application/json
 ```
 
@@ -32,16 +32,20 @@ Content-Type: application/json
   "catagory": "栏目",
   "publish_time": "2026-06-11T08:00:00.000Z",
   "content": "文章正文",
-  "summary": "摘要",
-  "reserved_1": "文章正文",
-  "reserved_2": "摘要",
-  "reserved_3": "document.title",
-  "reserved_4": "页面域名",
-  "reserved_5": "采集时间"
+  "summary": "摘要"
 }
 ```
 
-其中 `reserved_1` 可直接写入现有 `articles.reserved_1` 字段用于保存正文。
+后端会把 `content` 写入数据库的 `articles.content` 字段，并在保存时生成 `articles.add_time`。
+
+### 保存接口调试
+
+“接口设置”里包含“文章保存接口调试”区域：
+
+1. 确认上方“文章保存接口”是当前后端地址，例如 `http://127.0.0.1:1234/api/articles`。
+2. 点击“生成保存请求”，插件会提取当前文章并生成完整请求 JSON，包含 `endpoint`、`method`、`headers` 和 `body`。
+3. 可以直接修改请求 JSON，例如临时调整路径、Header 或字段内容。
+4. 点击“发送保存请求”，下方会显示 HTTP 状态、响应头、响应体和耗时，便于排查 `Operation without privileges` 这类后端返回。
 
 ## 大模型对话
 

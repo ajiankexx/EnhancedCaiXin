@@ -18,8 +18,7 @@ type Article struct {
 	Catagory    *string    `json:"catagory,omitempty"`
 	PublishTime *time.Time `json:"publish_time,omitempty"`
 	Content     *string    `json:"content,omitempty"`
-	Reserved1   *string    `json:"reserved_1,omitempty"`
-	Reserved2   *string    `json:"reserved_2,omitempty"`
+	AddTime     *time.Time `json:"add_time,omitempty"`
 	Reserved3   *string    `json:"reserved_3,omitempty"`
 	Reserved4   *string    `json:"reserved_4,omitempty"`
 	Reserved5   *string    `json:"reserved_5,omitempty"`
@@ -35,36 +34,33 @@ func NewArticleStore(db *sql.DB) *ArticleStore {
 	return &ArticleStore{db: db}
 }
 
-func (s *ArticleStore) Upsert(ctx context.Context, article Article) (Article, error) {
-	reserved1 := article.Reserved1
-	if reserved1 == nil {
-		reserved1 = article.Content
+func (s *ArticleStore) CreateIfNotExists(ctx context.Context, article Article) (Article, bool, error) {
+	existing, err := s.FindByCaixinID(ctx, article.CaixinID)
+	if err == nil {
+		return existing, false, nil
+	}
+	if !errors.Is(err, ErrArticleNotFound) {
+		return Article{}, false, err
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	addTime := time.Now()
+
+	_, err = s.db.ExecContext(ctx, `
 INSERT INTO articles (
   caixin_id, url, title, author, catagory, publish_time,
-  reserved_1, reserved_2, reserved_3, reserved_4, reserved_5
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-  caixin_id = VALUES(caixin_id),
-  url = VALUES(url),
-  title = VALUES(title),
-  author = VALUES(author),
-  catagory = VALUES(catagory),
-  publish_time = VALUES(publish_time),
-  reserved_1 = VALUES(reserved_1),
-  reserved_2 = VALUES(reserved_2),
-  reserved_3 = VALUES(reserved_3),
-  reserved_4 = VALUES(reserved_4),
-  reserved_5 = VALUES(reserved_5)
+  content, add_time, reserved_3, reserved_4, reserved_5
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
 `, article.CaixinID, article.URL, article.Title, article.Author, article.Catagory, article.PublishTime,
-		reserved1, article.Reserved2, article.Reserved3, article.Reserved4, article.Reserved5)
+		article.Content, addTime)
 	if err != nil {
-		return Article{}, err
+		return Article{}, false, err
 	}
 
-	return s.FindByCaixinID(ctx, article.CaixinID)
+	saved, err := s.FindByCaixinID(ctx, article.CaixinID)
+	if err != nil {
+		return Article{}, false, err
+	}
+	return saved, true, nil
 }
 
 func (s *ArticleStore) FindByCaixinID(ctx context.Context, caixinID string) (Article, error) {
@@ -78,7 +74,7 @@ func (s *ArticleStore) FindByURL(ctx context.Context, url string) (Article, erro
 func (s *ArticleStore) findOne(ctx context.Context, where string, arg any) (Article, error) {
 	row := s.db.QueryRowContext(ctx, `
 SELECT id, caixin_id, url, title, author, catagory, publish_time,
-       reserved_1, reserved_2, reserved_3, reserved_4, reserved_5,
+       content, add_time, reserved_3, reserved_4, reserved_5,
        created_at, updated_at
 FROM articles
 WHERE `+where+`
@@ -86,8 +82,8 @@ LIMIT 1
 `, arg)
 
 	var article Article
-	var author, catagory, reserved1, reserved2, reserved3, reserved4, reserved5 sql.NullString
-	var publishTime, createdAt, updatedAt sql.NullTime
+	var author, catagory, content, reserved3, reserved4, reserved5 sql.NullString
+	var publishTime, addTime, createdAt, updatedAt sql.NullTime
 	if err := row.Scan(
 		&article.ID,
 		&article.CaixinID,
@@ -96,8 +92,8 @@ LIMIT 1
 		&author,
 		&catagory,
 		&publishTime,
-		&reserved1,
-		&reserved2,
+		&content,
+		&addTime,
 		&reserved3,
 		&reserved4,
 		&reserved5,
@@ -113,9 +109,8 @@ LIMIT 1
 	article.Author = stringPtr(author)
 	article.Catagory = stringPtr(catagory)
 	article.PublishTime = timePtr(publishTime)
-	article.Reserved1 = stringPtr(reserved1)
-	article.Content = article.Reserved1
-	article.Reserved2 = stringPtr(reserved2)
+	article.Content = stringPtr(content)
+	article.AddTime = timePtr(addTime)
 	article.Reserved3 = stringPtr(reserved3)
 	article.Reserved4 = stringPtr(reserved4)
 	article.Reserved5 = stringPtr(reserved5)

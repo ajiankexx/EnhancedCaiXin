@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS articles (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  caixin_id VARCHAR(128) NOT NULL,
+  url VARCHAR(2048) NOT NULL,
+  title VARCHAR(512) NOT NULL,
+  author VARCHAR(255) NULL,
+  catagory VARCHAR(255) NULL,
+  publish_time DATETIME NULL,
+  reserved_1 TEXT NULL,
+  reserved_2 TEXT NULL,
+  reserved_3 TEXT NULL,
+  reserved_4 TEXT NULL,
+  reserved_5 TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_articles_caixin_id (caixin_id),
+  UNIQUE KEY uk_articles_url (url(768)),
+  KEY idx_articles_publish_time (publish_time),
+  KEY idx_articles_title (title)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

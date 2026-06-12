@@ -11,7 +11,7 @@ type Config struct {
 }
 
 func FromEnv() Config {
-	addr := getenv("SERVER_ADDR", "127.0.0.1:8081")
+	addr := getenv("SERVER_ADDR", "127.0.0.1:1234")
 	dsn := os.Getenv("MYSQL_DSN")
 	if dsn == "" {
 		dsn = fmt.Sprintf(
