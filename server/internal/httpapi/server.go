@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,19 +13,21 @@ import (
 )
 
 type Server struct {
-	store  *database.ArticleStore
-	logger *slog.Logger
-	mux    *http.ServeMux
+	articles    *database.ArticleStore
+	annotations *database.AnnotationStore
+	logger      *slog.Logger
+	mux         *http.ServeMux
 }
 
-func NewServer(store *database.ArticleStore, logger *slog.Logger) http.Handler {
+func NewServer(articles *database.ArticleStore, annotations *database.AnnotationStore, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	server := &Server{
-		store:  store,
-		logger: logger,
-		mux:    http.NewServeMux(),
+		articles:    articles,
+		annotations: annotations,
+		logger:      logger,
+		mux:         http.NewServeMux(),
 	}
 	server.routes()
 	return server.withRequestLogging(server.withCORS(server.mux))
@@ -34,6 +37,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("POST /api/articles", s.handleCreateArticle)
 	s.mux.HandleFunc("GET /api/articles/{caixinID}", s.handleGetArticle)
+	s.mux.HandleFunc("GET /api/articles/{caixinID}/annotations", s.handleListAnnotations)
+	s.mux.HandleFunc("POST /api/articles/{caixinID}/annotations", s.handleCreateAnnotation)
+	s.mux.HandleFunc("DELETE /api/annotations/{id}", s.handleDeleteAnnotation)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -63,7 +69,7 @@ func (s *Server) handleCreateArticle(w http.ResponseWriter, r *http.Request) {
 		"title", article.Title,
 		"has_content", article.Content != nil && strings.TrimSpace(*article.Content) != "",
 	)
-	saved, created, err := s.store.CreateIfNotExists(r.Context(), article)
+	saved, created, err := s.articles.CreateIfNotExists(r.Context(), article)
 	if err != nil {
 		s.logger.Error("save article failed",
 			"error", err,
@@ -100,7 +106,7 @@ func (s *Server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	article, err := s.store.FindByCaixinID(r.Context(), caixinID)
+	article, err := s.articles.FindByCaixinID(r.Context(), caixinID)
 	if err != nil {
 		if errors.Is(err, database.ErrArticleNotFound) {
 			s.logger.Warn("article not found", "caixin_id", caixinID)
@@ -117,6 +123,103 @@ func (s *Server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 		"ok":      true,
 		"article": article,
 	})
+}
+
+func (s *Server) handleListAnnotations(w http.ResponseWriter, r *http.Request) {
+	caixinID := strings.TrimSpace(r.PathValue("caixinID"))
+	if caixinID == "" {
+		writeError(w, http.StatusBadRequest, "caixin_id is required")
+		return
+	}
+
+	annotations, err := s.annotations.ListByCaixinID(r.Context(), caixinID)
+	if err != nil {
+		s.logger.Error("list annotations failed", "error", err, "caixin_id", caixinID)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":          true,
+		"annotations": annotations,
+	})
+}
+
+func (s *Server) handleCreateAnnotation(w http.ResponseWriter, r *http.Request) {
+	caixinID := strings.TrimSpace(r.PathValue("caixinID"))
+	if caixinID == "" {
+		writeError(w, http.StatusBadRequest, "caixin_id is required")
+		return
+	}
+
+	var request database.Annotation
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		s.logger.Warn("decode annotation request failed", "error", err, "caixin_id", caixinID)
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	request.Type = strings.TrimSpace(request.Type)
+	request.SelectedText = strings.TrimSpace(request.SelectedText)
+	request.Color = strings.TrimSpace(request.Color)
+	if request.Color == "" {
+		request.Color = "yellow"
+	}
+
+	if request.Type != "highlight" && request.Type != "note" {
+		writeError(w, http.StatusBadRequest, "type must be highlight or note")
+		return
+	}
+	if request.SelectedText == "" {
+		writeError(w, http.StatusBadRequest, "selected_text is required")
+		return
+	}
+	if request.EndOffset <= request.StartOffset {
+		writeError(w, http.StatusBadRequest, "end_offset must be greater than start_offset")
+		return
+	}
+
+	article, err := s.articles.FindByCaixinID(r.Context(), caixinID)
+	if err != nil {
+		if errors.Is(err, database.ErrArticleNotFound) {
+			writeError(w, http.StatusNotFound, "article not found")
+			return
+		}
+		s.logger.Error("load article for annotation failed", "error", err, "caixin_id", caixinID)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	request.ArticleID = article.ID
+	request.CaixinID = article.CaixinID
+	annotation, err := s.annotations.Create(r.Context(), request)
+	if err != nil {
+		s.logger.Error("create annotation failed", "error", err, "caixin_id", caixinID, "article_id", article.ID)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"annotation": annotation,
+	})
+}
+
+func (s *Server) handleDeleteAnnotation(w http.ResponseWriter, r *http.Request) {
+	idText := strings.TrimSpace(r.PathValue("id"))
+	id, err := strconv.ParseUint(idText, 10, 64)
+	if err != nil || id == 0 {
+		writeError(w, http.StatusBadRequest, "annotation id is required")
+		return
+	}
+
+	if err := s.annotations.SoftDelete(r.Context(), id); err != nil {
+		s.logger.Error("delete annotation failed", "error", err, "id", id)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) withRequestLogging(next http.Handler) http.Handler {
@@ -175,7 +278,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Vary", "Origin")
 			}
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		}
 

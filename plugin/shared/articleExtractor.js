@@ -101,11 +101,8 @@
   }
 
   function extractArticleBody() {
-    for (const selector of ARTICLE_SELECTORS) {
-      const element = document.querySelector(selector);
-      if (!element) {
-        continue;
-      }
+    const element = findArticleContainer();
+    if (element) {
       const paragraphs = Array.from(element.querySelectorAll("p"))
         .map((node) => normalizeText(node.textContent))
         .filter(Boolean);
@@ -122,6 +119,19 @@
       .map((node) => normalizeText(node.textContent))
       .filter((text) => text.length > 20);
     return dropLeadingAiSummaryNotice(fallbackParagraphs).join("\n\n");
+  }
+
+  function findArticleContainer() {
+    for (const selector of ARTICLE_SELECTORS) {
+      const element = document.querySelector(selector);
+      if (!element) {
+        continue;
+      }
+      if (normalizeText(element.textContent).length > 80) {
+        return element;
+      }
+    }
+    return null;
   }
 
   function extractPublishTime() {
@@ -180,6 +190,7 @@
 
   window.EnhancedCaiXinArticleExtractor = {
     extractCurrentArticle,
+    findArticleContainer,
     normalizeText
   };
 })();

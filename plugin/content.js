@@ -4,6 +4,13 @@
   }
   window.__enhancedCaiXinLoaded = true;
 
+  const annotationState = {
+    article: null,
+    annotations: [],
+    locatedIds: new Set(),
+    toolbar: null
+  };
+
   function sendMessage(message) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, (response) => {
@@ -37,6 +44,382 @@
     } catch (error) {
       setStatus(error.message || String(error), "error");
     }
+  }
+
+  function currentArticle() {
+    if (!annotationState.article) {
+      annotationState.article = window.EnhancedCaiXinArticleExtractor.extractCurrentArticle();
+    }
+    return annotationState.article;
+  }
+
+  function articleContainer() {
+    return window.EnhancedCaiXinArticleExtractor.findArticleContainer();
+  }
+
+  function normalizeText(value) {
+    return window.EnhancedCaiXinArticleExtractor.normalizeText(value);
+  }
+
+  function isIgnoredTextNode(node) {
+    const parent = node.parentElement;
+    return !parent || Boolean(parent.closest("#ecx-control-panel, #ecx-chat-sidebar, .ecx-selection-toolbar, script, style"));
+  }
+
+  function buildTextIndex(container) {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return isIgnoredTextNode(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const chars = [];
+    const positions = [];
+    let pendingSpace = false;
+    let node = walker.nextNode();
+
+    while (node) {
+      const text = node.nodeValue || "";
+      for (let offset = 0; offset < text.length; offset += 1) {
+        const char = text[offset];
+        if (/\s/.test(char) || char === "\u00a0") {
+          pendingSpace = chars.length > 0;
+          continue;
+        }
+        if (pendingSpace) {
+          chars.push(" ");
+          positions.push({ node, offset });
+          pendingSpace = false;
+        }
+        chars.push(char);
+        positions.push({ node, offset });
+      }
+      node = walker.nextNode();
+    }
+
+    while (chars.length > 0 && chars[chars.length - 1] === " ") {
+      chars.pop();
+      positions.pop();
+    }
+
+    return {
+      text: chars.join(""),
+      positions
+    };
+  }
+
+  function offsetToPoint(index, offset) {
+    if (offset <= 0) {
+      const first = index.positions[0];
+      return first ? { node: first.node, offset: first.offset } : null;
+    }
+    const previous = index.positions[offset - 1];
+    return previous ? { node: previous.node, offset: previous.offset + 1 } : null;
+  }
+
+  function rangeFromOffsets(container, startOffset, endOffset) {
+    const index = buildTextIndex(container);
+    if (startOffset < 0 || endOffset > index.positions.length || endOffset <= startOffset) {
+      return null;
+    }
+    const start = offsetToPoint(index, startOffset);
+    const end = offsetToPoint(index, endOffset);
+    if (!start || !end) {
+      return null;
+    }
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    return { range, text: index.text.slice(startOffset, endOffset), index };
+  }
+
+  function selectionOffsets(container, range) {
+    const before = document.createRange();
+    before.selectNodeContents(container);
+    before.setEnd(range.startContainer, range.startOffset);
+    const startOffset = normalizeText(before.toString()).length;
+    const selectedText = normalizeText(range.toString());
+    return {
+      startOffset,
+      endOffset: startOffset + selectedText.length,
+      selectedText
+    };
+  }
+
+  function findFallbackOffsets(annotation, index) {
+    const selected = normalizeText(annotation.selected_text);
+    const prefix = normalizeText(annotation.prefix_text || "");
+    const suffix = normalizeText(annotation.suffix_text || "");
+    if (!selected) {
+      return null;
+    }
+
+    const combined = `${prefix}${selected}${suffix}`;
+    if (prefix || suffix) {
+      const combinedIndex = index.text.indexOf(combined);
+      if (combinedIndex >= 0) {
+        return {
+          start: combinedIndex + prefix.length,
+          end: combinedIndex + prefix.length + selected.length
+        };
+      }
+    }
+
+    const selectedIndex = index.text.indexOf(selected);
+    if (selectedIndex >= 0) {
+      return { start: selectedIndex, end: selectedIndex + selected.length };
+    }
+    return null;
+  }
+
+  function wrapRange(range, annotation) {
+    const mark = document.createElement("mark");
+    mark.className = "ecx-annotation-mark";
+    mark.dataset.ecxAnnotationId = String(annotation.id);
+    mark.dataset.ecxAnnotationType = annotation.type;
+    mark.title = annotation.note_text || "财新高亮";
+    mark.appendChild(range.extractContents());
+    range.insertNode(mark);
+  }
+
+  function clearRenderedAnnotations() {
+    document.querySelectorAll("mark.ecx-annotation-mark[data-ecx-annotation-id]").forEach((mark) => {
+      const parent = mark.parentNode;
+      while (mark.firstChild) {
+        parent.insertBefore(mark.firstChild, mark);
+      }
+      parent.removeChild(mark);
+      parent.normalize();
+    });
+    annotationState.locatedIds = new Set();
+  }
+
+  function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+    return aStart < bEnd && bStart < aEnd;
+  }
+
+  function hasOverlappingAnnotation(startOffset, endOffset) {
+    return annotationState.annotations.some((annotation) => (
+      rangesOverlap(startOffset, endOffset, annotation.start_offset, annotation.end_offset)
+    ));
+  }
+
+  function renderAnnotations() {
+    const container = articleContainer();
+    clearRenderedAnnotations();
+    if (!container) {
+      renderAnnotationList("未能识别正文，无法渲染高亮。");
+      return;
+    }
+
+    const annotations = [...annotationState.annotations].sort((a, b) => b.start_offset - a.start_offset);
+    for (const annotation of annotations) {
+      let located = rangeFromOffsets(container, annotation.start_offset, annotation.end_offset);
+      const expected = normalizeText(annotation.selected_text);
+      if (!located || normalizeText(located.text) !== expected) {
+        const index = buildTextIndex(container);
+        const fallback = findFallbackOffsets(annotation, index);
+        located = fallback ? rangeFromOffsets(container, fallback.start, fallback.end) : null;
+      }
+      if (!located) {
+        continue;
+      }
+      wrapRange(located.range, annotation);
+      annotationState.locatedIds.add(Number(annotation.id));
+    }
+    renderAnnotationList();
+  }
+
+  function renderAnnotationList(message = "") {
+    const list = document.querySelector("[data-ecx-annotation-list]");
+    if (!list) {
+      return;
+    }
+    if (message) {
+      list.innerHTML = `<div class="ecx-annotation-empty">${message}</div>`;
+      return;
+    }
+    if (annotationState.annotations.length === 0) {
+      list.innerHTML = '<div class="ecx-annotation-empty">暂无笔记或高亮。</div>';
+      return;
+    }
+    list.innerHTML = annotationState.annotations.map((annotation) => {
+      const located = annotationState.locatedIds.has(Number(annotation.id));
+      const note = annotation.note_text ? `<div class="ecx-annotation-note">${escapeHTML(annotation.note_text)}</div>` : "";
+      const missing = located ? "" : '<div class="ecx-annotation-missing">未能定位到页面文本</div>';
+      return `
+        <article class="ecx-annotation-item" data-ecx-annotation-item="${annotation.id}">
+          <div class="ecx-annotation-meta">${annotation.type === "note" ? "笔记" : "高亮"}</div>
+          <div class="ecx-annotation-quote">${escapeHTML(annotation.selected_text)}</div>
+          ${note}
+          ${missing}
+          <button type="button" data-ecx-delete-annotation="${annotation.id}">删除</button>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function escapeHTML(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  async function loadAnnotations(showStatus = false) {
+    const article = currentArticle();
+    if (!article.caixin_id) {
+      renderAnnotationList("未能识别文章 ID。");
+      return;
+    }
+    if (showStatus) {
+      setStatus("正在加载笔记与高亮...", "muted");
+    }
+    try {
+      const response = await sendMessage({
+        type: "LIST_ANNOTATIONS",
+        caixinID: article.caixin_id
+      });
+      annotationState.annotations = response.annotations || [];
+      renderAnnotations();
+      if (showStatus) {
+        setStatus("笔记与高亮已加载。", "success");
+      }
+    } catch (error) {
+      renderAnnotationList(error.message || String(error));
+      if (showStatus) {
+        setStatus(error.message || String(error), "error");
+      }
+    }
+  }
+
+  function annotationPayloadFromSelection(noteText = "") {
+    const container = articleContainer();
+    const selection = window.getSelection();
+    if (!container || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      throw new Error("请先在文章正文中选择一段文本。");
+    }
+    const range = selection.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer)) {
+      throw new Error("只能在文章正文中创建高亮或笔记。");
+    }
+
+    const offsets = selectionOffsets(container, range);
+    if (!offsets.selectedText) {
+      throw new Error("选中文本为空。");
+    }
+    if (hasOverlappingAnnotation(offsets.startOffset, offsets.endOffset)) {
+      throw new Error("当前选区与已有高亮重叠，请重新选择更小范围。");
+    }
+
+    const index = buildTextIndex(container);
+    return {
+      type: noteText ? "note" : "highlight",
+      selected_text: offsets.selectedText,
+      note_text: noteText || null,
+      color: "yellow",
+      start_offset: offsets.startOffset,
+      end_offset: offsets.endOffset,
+      prefix_text: index.text.slice(Math.max(0, offsets.startOffset - 80), offsets.startOffset),
+      suffix_text: index.text.slice(offsets.endOffset, offsets.endOffset + 80)
+    };
+  }
+
+  async function createAnnotationFromSelection(noteText = "") {
+    const article = currentArticle();
+    const payload = annotationPayloadFromSelection(noteText);
+    setStatus("正在保存文章并创建笔记/高亮...", "muted");
+    await window.EnhancedCaiXinSaveArticle.saveCurrentArticle();
+    const response = await sendMessage({
+      type: "CREATE_ANNOTATION",
+      caixinID: article.caixin_id,
+      annotation: payload
+    });
+    annotationState.annotations.push(response.annotation);
+    annotationState.annotations.sort((a, b) => a.start_offset - b.start_offset || a.id - b.id);
+    window.getSelection()?.removeAllRanges();
+    hideSelectionToolbar();
+    renderAnnotations();
+    setStatus(payload.type === "note" ? "笔记已创建。" : "高亮已创建。", "success");
+  }
+
+  async function deleteAnnotation(id) {
+    setStatus("正在删除笔记/高亮...", "muted");
+    await sendMessage({
+      type: "DELETE_ANNOTATION",
+      id
+    });
+    annotationState.annotations = annotationState.annotations.filter((annotation) => String(annotation.id) !== String(id));
+    renderAnnotations();
+    setStatus("笔记/高亮已删除。", "success");
+  }
+
+  function ensureSelectionToolbar() {
+    if (annotationState.toolbar) {
+      return annotationState.toolbar;
+    }
+    const toolbar = document.createElement("div");
+    toolbar.className = "ecx-selection-toolbar";
+    toolbar.hidden = true;
+    toolbar.innerHTML = `
+      <button type="button" data-ecx-create-highlight>高亮</button>
+      <button type="button" data-ecx-create-note>添加笔记</button>
+    `;
+    document.documentElement.appendChild(toolbar);
+    toolbar.querySelector("[data-ecx-create-highlight]").addEventListener("click", () => {
+      createAnnotationFromSelection().catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    toolbar.querySelector("[data-ecx-create-note]").addEventListener("click", () => {
+      const noteText = prompt("请输入笔记内容：", "");
+      if (noteText === null) {
+        return;
+      }
+      createAnnotationFromSelection(noteText.trim()).catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    annotationState.toolbar = toolbar;
+    return toolbar;
+  }
+
+  function hideSelectionToolbar() {
+    if (annotationState.toolbar) {
+      annotationState.toolbar.hidden = true;
+    }
+  }
+
+  function updateSelectionToolbar() {
+    const selection = window.getSelection();
+    const container = articleContainer();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !container) {
+      hideSelectionToolbar();
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer) || normalizeText(range.toString()).length === 0) {
+      hideSelectionToolbar();
+      return;
+    }
+    const rect = range.getBoundingClientRect();
+    if (!rect.width && !rect.height) {
+      hideSelectionToolbar();
+      return;
+    }
+    const toolbar = ensureSelectionToolbar();
+    toolbar.hidden = false;
+    const left = clamp(rect.left + rect.width / 2 - toolbar.offsetWidth / 2, 8, window.innerWidth - toolbar.offsetWidth - 8);
+    const top = clamp(rect.top - toolbar.offsetHeight - 8, 8, window.innerHeight - toolbar.offsetHeight - 8);
+    toolbar.style.left = `${left}px`;
+    toolbar.style.top = `${top}px`;
+  }
+
+  function bindAnnotationSelection() {
+    document.addEventListener("selectionchange", () => {
+      window.setTimeout(updateSelectionToolbar, 0);
+    });
+    document.addEventListener("mousedown", (event) => {
+      if (!event.target.closest(".ecx-selection-toolbar")) {
+        hideSelectionToolbar();
+      }
+    });
   }
 
   async function loadSettings(form) {
@@ -248,8 +631,18 @@
       <div class="ecx-panel-body">
         <button class="ecx-primary-button" type="button" data-ecx-save>保存当前文章到 MySQL</button>
         <button class="ecx-secondary-button" type="button" data-ecx-chat>打开文章对话侧边栏</button>
+        <button class="ecx-secondary-button" type="button" data-ecx-toggle-annotations>笔记/高亮</button>
         <button class="ecx-link-button" type="button" data-ecx-toggle-settings>接口设置</button>
         <div class="ecx-status" data-ecx-status data-tone="muted">等待操作。</div>
+        <div class="ecx-annotations-panel" data-ecx-annotations hidden>
+          <div class="ecx-annotations-header">
+            <div class="ecx-annotations-title">笔记与高亮</div>
+            <button type="button" data-ecx-refresh-annotations>刷新</button>
+          </div>
+          <div class="ecx-annotation-list" data-ecx-annotation-list>
+            <div class="ecx-annotation-empty">正在加载...</div>
+          </div>
+        </div>
         <div class="ecx-settings" data-ecx-settings hidden>
           <form data-ecx-settings-form>
             <label>
@@ -322,6 +715,25 @@
     panel.querySelector("[data-ecx-chat]").addEventListener("click", () => {
       window.EnhancedCaiXinChatSidebar.open();
     });
+    panel.querySelector("[data-ecx-toggle-annotations]").addEventListener("click", async () => {
+      const annotations = panel.querySelector("[data-ecx-annotations]");
+      annotations.hidden = !annotations.hidden;
+      if (!annotations.hidden) {
+        await loadAnnotations(true);
+      }
+    });
+    panel.querySelector("[data-ecx-refresh-annotations]").addEventListener("click", () => {
+      loadAnnotations(true);
+    });
+    panel.querySelector("[data-ecx-annotation-list]").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-ecx-delete-annotation]");
+      if (!button) {
+        return;
+      }
+      deleteAnnotation(button.dataset.ecxDeleteAnnotation).catch((error) => {
+        setStatus(error.message || String(error), "error");
+      });
+    });
     panel.querySelector("[data-ecx-collapse]").addEventListener("click", () => {
       panel.classList.toggle("ecx-panel-collapsed");
     });
@@ -348,4 +760,6 @@
   }
 
   createControlPanel();
+  bindAnnotationSelection();
+  loadAnnotations(false);
 })();

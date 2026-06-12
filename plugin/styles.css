@@ -1,12 +1,14 @@
 #ecx-control-panel,
-#ecx-chat-sidebar {
+#ecx-chat-sidebar,
+.ecx-selection-toolbar {
   color: #1f2933;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   box-sizing: border-box;
 }
 
 #ecx-control-panel *,
-#ecx-chat-sidebar * {
+#ecx-chat-sidebar *,
+.ecx-selection-toolbar * {
   box-sizing: border-box;
 }
 
@@ -129,6 +131,119 @@
 
 .ecx-status[data-tone="error"] {
   color: #b42318;
+}
+
+.ecx-annotation-mark {
+  background: #fff3a3;
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.ecx-annotation-mark[data-ecx-annotation-type="note"] {
+  background: #ffe08a;
+  border-bottom: 2px solid #d97706;
+}
+
+.ecx-selection-toolbar {
+  position: fixed;
+  z-index: 2147483647;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #cfd7e3;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.2);
+}
+
+.ecx-selection-toolbar[hidden],
+.ecx-annotations-panel[hidden] {
+  display: none;
+}
+
+.ecx-selection-toolbar button,
+.ecx-annotations-header button,
+.ecx-annotation-item button {
+  min-height: 30px;
+  border: 1px solid #c8d7f4;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1255cc;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ecx-annotations-panel {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #edf1f7;
+  padding-top: 10px;
+}
+
+.ecx-annotations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ecx-annotations-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ecx-annotation-list {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ecx-annotation-empty {
+  color: #667085;
+  border: 1px dashed #cfd7e3;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ecx-annotation-item {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfe;
+}
+
+.ecx-annotation-meta,
+.ecx-annotation-missing {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ecx-annotation-quote {
+  color: #1f2933;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ecx-annotation-note {
+  color: #344054;
+  border-left: 3px solid #f2b705;
+  padding-left: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ecx-annotation-item button {
+  justify-self: start;
+  color: #b42318;
+  border-color: #f2b8b5;
 }
 
 .ecx-settings {

@@ -33,6 +33,65 @@ async function saveArticle(article) {
   }
 }
 
+function annotationEndpointBase(settings) {
+  const endpoint = (settings.articleSaveEndpoint || DEFAULTS.articleSaveEndpoint || "").replace(/\/+$/, "");
+  if (!endpoint) {
+    throw new Error("请先在插件设置中填写文章保存接口。");
+  }
+  return endpoint.endsWith("/articles") ? endpoint.slice(0, -"/articles".length) : endpoint;
+}
+
+async function listAnnotations(caixinID) {
+  const settings = await getSettings();
+  const endpoint = `${annotationEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}/annotations`;
+  const response = await fetch(endpoint);
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `加载笔记失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function createAnnotation(caixinID, annotation) {
+  const settings = await getSettings();
+  const endpoint = `${annotationEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}/annotations`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(annotation || {})
+  });
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `创建笔记失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function deleteAnnotation(id) {
+  const settings = await getSettings();
+  const endpoint = `${annotationEndpointBase(settings)}/annotations/${encodeURIComponent(id)}`;
+  const response = await fetch(endpoint, { method: "DELETE" });
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `删除笔记失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function parseJSONResponse(response) {
+  const text = await response.text();
+  if (!text) {
+    return {};
+  }
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return { message: text };
+  }
+}
+
 function buildSaveArticleRequest(settings, article) {
   if (!settings.articleSaveEndpoint) {
     throw new Error("请先在插件设置中填写文章保存接口。");
@@ -210,6 +269,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
     if (message.type === "SAVE_ARTICLE") {
       return saveArticle(message.article);
+    }
+    if (message.type === "LIST_ANNOTATIONS") {
+      return listAnnotations(message.caixinID);
+    }
+    if (message.type === "CREATE_ANNOTATION") {
+      return createAnnotation(message.caixinID, message.annotation);
+    }
+    if (message.type === "DELETE_ANNOTATION") {
+      return deleteAnnotation(message.id);
     }
     if (message.type === "BUILD_SAVE_ARTICLE_REQUEST") {
       const settings = await getSettings();
