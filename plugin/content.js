@@ -11,6 +11,13 @@
     toolbar: null
   };
 
+  const favoriteState = {
+    folders: [],
+    articleFavorite: null,
+    favorites: [],
+    selectedListFolderId: ""
+  };
+
   function sendMessage(message) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, (response) => {
@@ -264,6 +271,233 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function formatDate(value) {
+    if (!value) {
+      return "";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return String(value);
+    }
+    return date.toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  function selectedFavoriteFolderIds(panel) {
+    return Array.from(panel.querySelectorAll("[data-ecx-favorite-folder]:checked"))
+      .map((input) => Number(input.value))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  }
+
+  function favoriteFolderNames(folders) {
+    return (folders || []).map((folder) => folder.name).filter(Boolean).join("、");
+  }
+
+  function updateFavoriteButton(panel) {
+    const button = panel.querySelector("[data-ecx-toggle-favorites]");
+    if (!button) {
+      return;
+    }
+    const favorited = Boolean(favoriteState.articleFavorite?.favorited);
+    const names = favoriteFolderNames(favoriteState.articleFavorite?.folders);
+    button.textContent = favorited ? "已收藏" : "收藏";
+    button.title = favorited && names ? `已收藏到：${names}` : "";
+  }
+
+  function renderFavoriteFolderOptions(panel) {
+    const list = panel.querySelector("[data-ecx-favorite-folder-list]");
+    if (!list) {
+      return;
+    }
+    if (favoriteState.folders.length === 0) {
+      list.innerHTML = '<div class="ecx-favorite-empty">暂无收藏夹。</div>';
+      return;
+    }
+
+    const selected = new Set((favoriteState.articleFavorite?.folders || []).map((folder) => Number(folder.id)));
+    list.innerHTML = favoriteState.folders.map((folder) => `
+      <label class="ecx-favorite-folder-option">
+        <input type="checkbox" data-ecx-favorite-folder value="${folder.id}" ${selected.has(Number(folder.id)) ? "checked" : ""}>
+        <span>${escapeHTML(folder.name)}</span>
+      </label>
+    `).join("");
+  }
+
+  function renderFavoriteFilter(panel) {
+    const select = panel.querySelector("[data-ecx-favorite-list-folder]");
+    if (!select) {
+      return;
+    }
+    const currentValue = favoriteState.selectedListFolderId;
+    select.innerHTML = [
+      '<option value="">全部收藏夹</option>',
+      ...favoriteState.folders.map((folder) => `<option value="${folder.id}">${escapeHTML(folder.name)}</option>`)
+    ].join("");
+    select.value = currentValue;
+  }
+
+  function renderFavoriteList(panel, message = "") {
+    const list = panel.querySelector("[data-ecx-favorite-list]");
+    if (!list) {
+      return;
+    }
+    if (message) {
+      list.innerHTML = `<div class="ecx-favorite-empty">${escapeHTML(message)}</div>`;
+      return;
+    }
+    if (favoriteState.favorites.length === 0) {
+      list.innerHTML = '<div class="ecx-favorite-empty">暂无收藏文章。</div>';
+      return;
+    }
+
+    list.innerHTML = favoriteState.favorites.map((favorite) => {
+      const article = favorite.article || {};
+      const folderNames = favoriteFolderNames(favorite.folders);
+      const meta = [
+        article.catagory,
+        formatDate(article.publish_time),
+        folderNames ? `收藏夹：${folderNames}` : ""
+      ].filter(Boolean).map(escapeHTML).join(" · ");
+      return `
+        <article class="ecx-favorite-item">
+          <a class="ecx-favorite-title" href="${escapeHTML(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(article.title || article.url || "未命名文章")}</a>
+          ${meta ? `<div class="ecx-favorite-meta">${meta}</div>` : ""}
+        </article>
+      `;
+    }).join("");
+  }
+
+  async function loadFavoriteFolders(panel) {
+    const response = await sendMessage({ type: "LIST_FAVORITE_FOLDERS" });
+    favoriteState.folders = response.folders || [];
+    renderFavoriteFolderOptions(panel);
+    renderFavoriteFilter(panel);
+  }
+
+  async function loadArticleFavorite(panel, showStatus = false) {
+    const article = currentArticle();
+    if (!article.caixin_id) {
+      return;
+    }
+    if (showStatus) {
+      setStatus("正在加载收藏状态...", "muted");
+    }
+    try {
+      const response = await sendMessage({
+        type: "GET_ARTICLE_FAVORITE",
+        caixinID: article.caixin_id
+      });
+      favoriteState.articleFavorite = response.favorite || { favorited: false, folders: [] };
+      renderFavoriteFolderOptions(panel);
+      updateFavoriteButton(panel);
+      if (showStatus) {
+        setStatus(favoriteState.articleFavorite.favorited ? "文章已收藏。" : "当前文章未收藏。", "success");
+      }
+    } catch (error) {
+      favoriteState.articleFavorite = { favorited: false, folders: [] };
+      updateFavoriteButton(panel);
+      if (showStatus) {
+        setStatus(error.message || String(error), "error");
+      }
+    }
+  }
+
+  async function saveFavoriteSelection(panel) {
+    const article = currentArticle();
+    setStatus("正在保存文章并更新收藏...", "muted");
+    await window.EnhancedCaiXinSaveArticle.saveCurrentArticle();
+    const response = await sendMessage({
+      type: "SAVE_ARTICLE_FAVORITE",
+      caixinID: article.caixin_id,
+      folderIDs: selectedFavoriteFolderIds(panel)
+    });
+    favoriteState.articleFavorite = response.favorite || { favorited: false, folders: [] };
+    renderFavoriteFolderOptions(panel);
+    updateFavoriteButton(panel);
+    await loadFavoriteList(panel);
+    setStatus("收藏已更新。", "success");
+  }
+
+  async function deleteArticleFavorite(panel) {
+    const article = currentArticle();
+    setStatus("正在取消收藏...", "muted");
+    await sendMessage({
+      type: "DELETE_ARTICLE_FAVORITE",
+      caixinID: article.caixin_id
+    });
+    favoriteState.articleFavorite = { favorited: false, folders: [] };
+    renderFavoriteFolderOptions(panel);
+    updateFavoriteButton(panel);
+    await loadFavoriteList(panel);
+    setStatus("已取消收藏。", "success");
+  }
+
+  async function createFavoriteFolder(panel) {
+    const input = panel.querySelector("[data-ecx-new-favorite-folder]");
+    const name = input.value.trim();
+    if (!name) {
+      setStatus("请输入收藏夹名称。", "error");
+      return;
+    }
+    setStatus("正在创建收藏夹...", "muted");
+    const response = await sendMessage({
+      type: "CREATE_FAVORITE_FOLDER",
+      name
+    });
+    input.value = "";
+    favoriteState.folders.push(response.folder);
+    renderFavoriteFolderOptions(panel);
+    renderFavoriteFilter(panel);
+    const checkbox = panel.querySelector(`[data-ecx-favorite-folder][value="${response.folder.id}"]`);
+    if (checkbox) {
+      checkbox.checked = true;
+    }
+    setStatus("收藏夹已创建。", "success");
+  }
+
+  async function loadFavoriteList(panel) {
+    renderFavoriteList(panel, "正在加载收藏列表...");
+    const folderID = Number(favoriteState.selectedListFolderId || 0);
+    try {
+      const response = await sendMessage({
+        type: "LIST_FAVORITES",
+        options: {
+          folderID,
+          limit: 50,
+          offset: 0
+        }
+      });
+      favoriteState.favorites = response.favorites || [];
+      renderFavoriteList(panel);
+    } catch (error) {
+      renderFavoriteList(panel, error.message || String(error));
+    }
+  }
+
+  async function loadFavoritesPanel(panel, showStatus = false) {
+    if (showStatus) {
+      setStatus("正在加载收藏信息...", "muted");
+    }
+    try {
+      await loadFavoriteFolders(panel);
+      await loadArticleFavorite(panel, false);
+      await loadFavoriteList(panel);
+      if (showStatus) {
+        setStatus("收藏信息已加载。", "success");
+      }
+    } catch (error) {
+      renderFavoriteList(panel, error.message || String(error));
+      if (showStatus) {
+        setStatus(error.message || String(error), "error");
+      }
+    }
   }
 
   async function loadAnnotations(showStatus = false) {
@@ -630,10 +864,37 @@
       </div>
       <div class="ecx-panel-body">
         <button class="ecx-primary-button" type="button" data-ecx-save>保存当前文章到 MySQL</button>
+        <button class="ecx-secondary-button" type="button" data-ecx-toggle-favorites>收藏</button>
         <button class="ecx-secondary-button" type="button" data-ecx-chat>打开文章对话侧边栏</button>
         <button class="ecx-secondary-button" type="button" data-ecx-toggle-annotations>笔记/高亮</button>
         <button class="ecx-link-button" type="button" data-ecx-toggle-settings>接口设置</button>
         <div class="ecx-status" data-ecx-status data-tone="muted">等待操作。</div>
+        <div class="ecx-favorites-panel" data-ecx-favorites hidden>
+          <div class="ecx-favorites-header">
+            <div class="ecx-favorites-title">当前文章收藏夹</div>
+            <button type="button" data-ecx-refresh-favorites>刷新</button>
+          </div>
+          <div class="ecx-favorite-folder-list" data-ecx-favorite-folder-list>
+            <div class="ecx-favorite-empty">正在加载...</div>
+          </div>
+          <div class="ecx-favorite-actions">
+            <button type="button" data-ecx-save-favorite>保存收藏</button>
+            <button type="button" data-ecx-delete-favorite>取消收藏</button>
+          </div>
+          <div class="ecx-favorite-create">
+            <input type="text" data-ecx-new-favorite-folder placeholder="新收藏夹名称">
+            <button type="button" data-ecx-create-favorite-folder>新建</button>
+          </div>
+          <div class="ecx-favorites-header">
+            <div class="ecx-favorites-title">收藏列表</div>
+            <select data-ecx-favorite-list-folder aria-label="收藏夹筛选">
+              <option value="">全部收藏夹</option>
+            </select>
+          </div>
+          <div class="ecx-favorite-list" data-ecx-favorite-list>
+            <div class="ecx-favorite-empty">正在加载...</div>
+          </div>
+        </div>
         <div class="ecx-annotations-panel" data-ecx-annotations hidden>
           <div class="ecx-annotations-header">
             <div class="ecx-annotations-title">笔记与高亮</div>
@@ -712,6 +973,35 @@
     makePanelDraggable(panel);
     applySavedPanelPosition(panel).catch(() => {});
     panel.querySelector("[data-ecx-save]").addEventListener("click", saveArticle);
+    panel.querySelector("[data-ecx-toggle-favorites]").addEventListener("click", async () => {
+      const favorites = panel.querySelector("[data-ecx-favorites]");
+      favorites.hidden = !favorites.hidden;
+      if (!favorites.hidden) {
+        await loadFavoritesPanel(panel, true);
+      }
+    });
+    panel.querySelector("[data-ecx-refresh-favorites]").addEventListener("click", () => {
+      loadFavoritesPanel(panel, true);
+    });
+    panel.querySelector("[data-ecx-save-favorite]").addEventListener("click", () => {
+      saveFavoriteSelection(panel).catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    panel.querySelector("[data-ecx-delete-favorite]").addEventListener("click", () => {
+      deleteArticleFavorite(panel).catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    panel.querySelector("[data-ecx-create-favorite-folder]").addEventListener("click", () => {
+      createFavoriteFolder(panel).catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    panel.querySelector("[data-ecx-new-favorite-folder]").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        createFavoriteFolder(panel).catch((error) => setStatus(error.message || String(error), "error"));
+      }
+    });
+    panel.querySelector("[data-ecx-favorite-list-folder]").addEventListener("change", (event) => {
+      favoriteState.selectedListFolderId = event.currentTarget.value;
+      loadFavoriteList(panel);
+    });
     panel.querySelector("[data-ecx-chat]").addEventListener("click", () => {
       window.EnhancedCaiXinChatSidebar.open();
     });
@@ -762,4 +1052,7 @@
   createControlPanel();
   bindAnnotationSelection();
   loadAnnotations(false);
+  loadFavoriteFolders(document.querySelector("#ecx-control-panel")).then(() => {
+    return loadArticleFavorite(document.querySelector("#ecx-control-panel"), false);
+  }).catch(() => {});
 })();

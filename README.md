@@ -64,3 +64,20 @@ go run ./cmd/server
 ```
 
 默认监听 `http://127.0.0.1:1234`，插件默认通过 `POST /api/articles` 保存文章。
+
+## Article Favorites
+
+插件浮动面板支持文章收藏：
+
+- 收藏或取消收藏当前文章。
+- 新建收藏夹，并把同一篇文章收藏到多个收藏夹。
+- 在插件面板内按收藏夹筛选查看收藏列表。
+
+服务端新增接口：
+
+- `GET /api/favorite-folders`: 查询收藏夹。
+- `POST /api/favorite-folders`: 创建收藏夹，请求体为 `{ "name": "收藏夹名称" }`。
+- `GET /api/articles/{caixin_id}/favorite`: 查询文章收藏状态。
+- `POST /api/articles/{caixin_id}/favorite`: 保存文章收藏夹，请求体为 `{ "folder_ids": [1, 2] }`；空数组会使用默认收藏夹。
+- `DELETE /api/articles/{caixin_id}/favorite`: 取消收藏文章。
+- `GET /api/favorites?folder_id=1&limit=50&offset=0`: 查询收藏文章列表。

@@ -11,8 +11,16 @@ http://127.0.0.1:1234
 - `GET /healthz`: 健康检查。
 - `POST /api/articles`: 保存文章，供插件默认配置调用；如果 `caixin_id` 已存在，则直接返回已有记录，不重复写入。
 - `GET /api/articles/{caixin_id}`: 按财新文章 ID 查询文章。
+- `GET /api/favorite-folders`: 查询收藏夹。
+- `POST /api/favorite-folders`: 创建收藏夹。
+- `GET /api/articles/{caixin_id}/favorite`: 查询文章收藏状态。
+- `POST /api/articles/{caixin_id}/favorite`: 收藏文章或更新所属收藏夹。
+- `DELETE /api/articles/{caixin_id}/favorite`: 取消收藏文章。
+- `GET /api/favorites`: 查询收藏列表，支持 `folder_id`、`limit`、`offset` 查询参数。
 
 服务会把请求中的 `content` 写入数据库的 `content` 字段，并在首次保存时生成 `add_time` 作为文章进入数据库的时间。`reserved_3` 到 `reserved_5` 暂时保持为空。
+
+收藏功能使用 `favorite_folders` 和 `article_favorite_folders` 两张表；同一篇文章可以收藏到多个收藏夹，默认收藏夹为 `默认收藏`。
 
 ## 运行
 

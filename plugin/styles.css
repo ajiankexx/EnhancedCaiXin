@@ -158,13 +158,17 @@
 }
 
 .ecx-selection-toolbar[hidden],
-.ecx-annotations-panel[hidden] {
+.ecx-annotations-panel[hidden],
+.ecx-favorites-panel[hidden] {
   display: none;
 }
 
 .ecx-selection-toolbar button,
 .ecx-annotations-header button,
-.ecx-annotation-item button {
+.ecx-annotation-item button,
+.ecx-favorites-header button,
+.ecx-favorite-actions button,
+.ecx-favorite-create button {
   min-height: 30px;
   border: 1px solid #c8d7f4;
   border-radius: 6px;
@@ -182,16 +186,36 @@
   padding-top: 10px;
 }
 
-.ecx-annotations-header {
+.ecx-favorites-panel {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #edf1f7;
+  padding-top: 10px;
+}
+
+.ecx-annotations-header,
+.ecx-favorites-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-.ecx-annotations-title {
+.ecx-annotations-title,
+.ecx-favorites-title {
   font-size: 13px;
   font-weight: 700;
+}
+
+.ecx-favorites-header select {
+  min-width: 128px;
+  max-width: 180px;
+  height: 30px;
+  border: 1px solid #cfd7e3;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 12px;
 }
 
 .ecx-annotation-list {
@@ -201,7 +225,81 @@
   overflow-y: auto;
 }
 
-.ecx-annotation-empty {
+.ecx-favorite-folder-list {
+  display: grid;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.ecx-favorite-folder-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fbfcfe;
+  color: #344054;
+  font-size: 13px;
+}
+
+.ecx-favorite-actions,
+.ecx-favorite-create {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ecx-favorite-create input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid #cfd7e3;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 13px;
+}
+
+.ecx-favorite-list {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ecx-favorite-item {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfe;
+}
+
+.ecx-favorite-title {
+  color: #1255cc;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.ecx-favorite-title:hover {
+  text-decoration: underline;
+}
+
+.ecx-favorite-meta {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ecx-annotation-empty,
+.ecx-favorite-empty {
   color: #667085;
   border: 1px dashed #cfd7e3;
   border-radius: 8px;

@@ -41,6 +41,10 @@ function annotationEndpointBase(settings) {
   return endpoint.endsWith("/articles") ? endpoint.slice(0, -"/articles".length) : endpoint;
 }
 
+function apiEndpointBase(settings) {
+  return annotationEndpointBase(settings);
+}
+
 async function listAnnotations(caixinID) {
   const settings = await getSettings();
   const endpoint = `${annotationEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}/annotations`;
@@ -76,6 +80,95 @@ async function deleteAnnotation(id) {
   const data = await parseJSONResponse(response);
   if (!response.ok) {
     throw new Error(data?.error || `删除笔记失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function listFavoriteFolders() {
+  const settings = await getSettings();
+  const endpoint = `${apiEndpointBase(settings)}/favorite-folders`;
+  const response = await fetch(endpoint);
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `加载收藏夹失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function createFavoriteFolder(name) {
+  const settings = await getSettings();
+  const endpoint = `${apiEndpointBase(settings)}/favorite-folders`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ name })
+  });
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `创建收藏夹失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function getArticleFavorite(caixinID) {
+  const settings = await getSettings();
+  const endpoint = `${apiEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}/favorite`;
+  const response = await fetch(endpoint);
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `加载收藏状态失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function saveArticleFavorite(caixinID, folderIDs) {
+  const settings = await getSettings();
+  const endpoint = `${apiEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}/favorite`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ folder_ids: folderIDs || [] })
+  });
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `保存收藏失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function deleteArticleFavorite(caixinID) {
+  const settings = await getSettings();
+  const endpoint = `${apiEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}/favorite`;
+  const response = await fetch(endpoint, { method: "DELETE" });
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `取消收藏失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function listFavorites(options = {}) {
+  const settings = await getSettings();
+  const params = new URLSearchParams();
+  if (options.folderID) {
+    params.set("folder_id", String(options.folderID));
+  }
+  if (options.limit) {
+    params.set("limit", String(options.limit));
+  }
+  if (options.offset) {
+    params.set("offset", String(options.offset));
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const endpoint = `${apiEndpointBase(settings)}/favorites${suffix}`;
+  const response = await fetch(endpoint);
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `加载收藏列表失败：HTTP ${response.status}`);
   }
   return data;
 }
@@ -278,6 +371,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
     if (message.type === "DELETE_ANNOTATION") {
       return deleteAnnotation(message.id);
+    }
+    if (message.type === "LIST_FAVORITE_FOLDERS") {
+      return listFavoriteFolders();
+    }
+    if (message.type === "CREATE_FAVORITE_FOLDER") {
+      return createFavoriteFolder(message.name);
+    }
+    if (message.type === "GET_ARTICLE_FAVORITE") {
+      return getArticleFavorite(message.caixinID);
+    }
+    if (message.type === "SAVE_ARTICLE_FAVORITE") {
+      return saveArticleFavorite(message.caixinID, message.folderIDs);
+    }
+    if (message.type === "DELETE_ARTICLE_FAVORITE") {
+      return deleteArticleFavorite(message.caixinID);
+    }
+    if (message.type === "LIST_FAVORITES") {
+      return listFavorites(message.options || {});
     }
     if (message.type === "BUILD_SAVE_ARTICLE_REQUEST") {
       const settings = await getSettings();
