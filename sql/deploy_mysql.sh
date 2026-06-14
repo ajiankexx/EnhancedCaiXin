@@ -50,7 +50,7 @@ if ! docker exec -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" "$CONTAINER_NAME" \
 fi
 
 docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" "$CONTAINER_NAME" \
-  mysql -uroot "$MYSQL_DATABASE" <<'SQL'
+  mysql --default-character-set=utf8mb4 -uroot "$MYSQL_DATABASE" <<'SQL'
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version VARCHAR(64) NOT NULL,
   applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -67,16 +67,16 @@ for migration_file in "$MIGRATIONS_DIR"/*.sql; do
   migration_version="$(basename "$migration_file" .sql)"
   applied_count="$(
     docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" "$CONTAINER_NAME" \
-      mysql -N -uroot "$MYSQL_DATABASE" \
+      mysql --default-character-set=utf8mb4 -N -uroot "$MYSQL_DATABASE" \
       -e "SELECT COUNT(*) FROM schema_migrations WHERE version = '$migration_version';"
   )"
 
   if [[ "$applied_count" == "0" ]]; then
     echo "Applying migration: $migration_version"
     docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" "$CONTAINER_NAME" \
-      mysql -uroot "$MYSQL_DATABASE" <"$migration_file"
+      mysql --default-character-set=utf8mb4 -uroot "$MYSQL_DATABASE" <"$migration_file"
     docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" "$CONTAINER_NAME" \
-      mysql -uroot "$MYSQL_DATABASE" \
+      mysql --default-character-set=utf8mb4 -uroot "$MYSQL_DATABASE" \
       -e "INSERT INTO schema_migrations (version) VALUES ('$migration_version');"
   else
     echo "Skipping applied migration: $migration_version"
