@@ -1,0 +1,377 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: #1f2933;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 34px;
+  border: 1px solid #c8d7f4;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1255cc;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+button:hover {
+  background: #f6f9ff;
+}
+
+.ecx-sidepanel {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  min-height: 100vh;
+}
+
+.ecx-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid #e1e6ef;
+  background: #f7f9fc;
+}
+
+.ecx-header h1 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.ecx-header p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.ecx-icon-button {
+  width: 32px;
+  min-height: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  font-size: 16px;
+}
+
+.ecx-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  padding: 10px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.ecx-tabs button {
+  min-height: 32px;
+  padding: 0 6px;
+  border-color: transparent;
+  color: #344054;
+  background: transparent;
+  font-size: 12px;
+}
+
+.ecx-tabs button[aria-pressed="true"] {
+  background: #1255cc;
+  color: #ffffff;
+}
+
+.ecx-status {
+  min-height: 34px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #edf1f7;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.ecx-status[data-tone="success"] {
+  color: #067647;
+}
+
+.ecx-status[data-tone="error"] {
+  color: #b42318;
+}
+
+.ecx-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.ecx-panel[hidden] {
+  display: none;
+}
+
+.ecx-primary-button {
+  min-height: 38px;
+  border-color: transparent;
+  background: #1255cc;
+  color: #ffffff;
+}
+
+.ecx-article-meta {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.ecx-article-meta div {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fbfcfe;
+}
+
+.ecx-article-meta dt {
+  color: #667085;
+  font-size: 12px;
+}
+
+.ecx-article-meta dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.ecx-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ecx-section-header strong,
+.ecx-debugger strong {
+  font-size: 13px;
+}
+
+.ecx-section-header select {
+  max-width: 170px;
+}
+
+.ecx-two-columns,
+.ecx-inline-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ecx-inline-form {
+  grid-template-columns: 1fr auto;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #cfd7e3;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+}
+
+input,
+select {
+  height: 34px;
+  padding: 6px 8px;
+}
+
+textarea {
+  min-height: 84px;
+  padding: 8px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.ecx-favorite-folder-list,
+.ecx-favorite-list,
+.ecx-annotation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ecx-favorite-folder-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fbfcfe;
+  color: #344054;
+  font-size: 13px;
+}
+
+.ecx-favorite-folder-option input {
+  width: auto;
+  height: auto;
+}
+
+.ecx-favorite-item,
+.ecx-annotation-item,
+.ecx-empty {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfe;
+}
+
+.ecx-empty {
+  color: #667085;
+  border-style: dashed;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ecx-favorite-title {
+  color: #1255cc;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.ecx-favorite-meta,
+.ecx-annotation-meta,
+.ecx-annotation-missing {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ecx-annotation-quote,
+.ecx-annotation-note {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ecx-annotation-note {
+  border-left: 3px solid #f2b705;
+  padding-left: 8px;
+  color: #344054;
+}
+
+.ecx-annotation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ecx-annotation-actions button:last-child,
+[data-ecx-delete-favorite] {
+  color: #b42318;
+  border-color: #f2b8b5;
+}
+
+.ecx-chat-panel {
+  grid-template-rows: minmax(240px, 1fr) auto;
+  height: calc(100vh - 125px);
+}
+
+.ecx-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfe;
+}
+
+.ecx-chat-bubble {
+  max-width: 92%;
+  white-space: pre-wrap;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ecx-chat-bubble-user {
+  align-self: flex-end;
+  background: #1255cc;
+  color: #ffffff;
+}
+
+.ecx-chat-bubble-assistant {
+  align-self: flex-start;
+  background: #eef2f7;
+}
+
+.ecx-chat-form {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  gap: 8px;
+}
+
+.ecx-settings-form,
+.ecx-debugger {
+  display: grid;
+  gap: 10px;
+}
+
+.ecx-settings-form label,
+.ecx-debugger label {
+  display: grid;
+  gap: 4px;
+  color: #344054;
+  font-size: 12px;
+}
+
+.ecx-settings-row {
+  display: grid;
+  grid-template-columns: 1fr 82px;
+  gap: 8px;
+}
+
+.ecx-debugger {
+  border-top: 1px solid #edf1f7;
+  padding-top: 12px;
+}
+
+.ecx-debugger textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.ecx-debugger pre {
+  max-height: 240px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid #cfd7e3;
+  border-radius: 6px;
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}

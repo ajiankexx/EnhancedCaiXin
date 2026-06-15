@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "财新文章保存与当前文章上下文大模型对话工具。",
   "permissions": [
+    "sidePanel",
     "storage"
   ],
   "host_permissions": [
@@ -15,6 +16,12 @@
   "background": {
     "service_worker": "background.js"
   },
+  "action": {
+    "default_title": "Enhanced CaiXin"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -24,7 +31,6 @@
         "shared/defaultConfig.js",
         "shared/articleExtractor.js",
         "save-to-mysql/saveArticle.js",
-        "ai-chat-sidebar/chatSidebar.js",
         "content.js"
       ],
       "css": [

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Enhanced CaiXin</title>
+    <link rel="stylesheet" href="sidepanel.css">
+  </head>
+  <body>
+    <main class="ecx-sidepanel">
+      <header class="ecx-header">
+        <div>
+          <h1>Enhanced CaiXin</h1>
+          <p data-ecx-article-title>正在读取当前标签页...</p>
+        </div>
+        <button type="button" class="ecx-icon-button" data-ecx-refresh title="刷新当前文章">↻</button>
+      </header>
+
+      <nav class="ecx-tabs" aria-label="功能">
+        <button type="button" data-ecx-tab="article" aria-pressed="true">文章</button>
+        <button type="button" data-ecx-tab="favorites" aria-pressed="false">收藏</button>
+        <button type="button" data-ecx-tab="chat" aria-pressed="false">对话</button>
+        <button type="button" data-ecx-tab="annotations" aria-pressed="false">笔记</button>
+        <button type="button" data-ecx-tab="settings" aria-pressed="false">设置</button>
+      </nav>
+
+      <div class="ecx-status" data-ecx-status data-tone="muted">等待操作。</div>
+
+      <section class="ecx-panel" data-ecx-panel="article">
+        <button class="ecx-primary-button" type="button" data-ecx-save>保存当前文章到 MySQL</button>
+        <dl class="ecx-article-meta">
+          <div><dt>标题</dt><dd data-ecx-current-title>-</dd></div>
+          <div><dt>作者</dt><dd data-ecx-current-author>-</dd></div>
+          <div><dt>发布时间</dt><dd data-ecx-current-time>-</dd></div>
+          <div><dt>文章 ID</dt><dd data-ecx-current-id>-</dd></div>
+        </dl>
+      </section>
+
+      <section class="ecx-panel" data-ecx-panel="favorites" hidden>
+        <div class="ecx-section-header">
+          <strong>当前文章收藏夹</strong>
+          <button type="button" data-ecx-refresh-favorites>刷新</button>
+        </div>
+        <div class="ecx-favorite-folder-list" data-ecx-favorite-folder-list></div>
+        <div class="ecx-two-columns">
+          <button type="button" data-ecx-save-favorite>保存收藏</button>
+          <button type="button" data-ecx-delete-favorite>删除文章</button>
+        </div>
+        <div class="ecx-inline-form">
+          <input type="text" data-ecx-new-favorite-folder placeholder="新收藏夹名称">
+          <button type="button" data-ecx-create-favorite-folder>新建</button>
+        </div>
+        <div class="ecx-section-header">
+          <strong>收藏列表</strong>
+          <select data-ecx-favorite-list-folder aria-label="收藏夹筛选">
+            <option value="">全部收藏夹</option>
+          </select>
+        </div>
+        <div class="ecx-favorite-list" data-ecx-favorite-list></div>
+      </section>
+
+      <section class="ecx-panel ecx-chat-panel" data-ecx-panel="chat" hidden>
+        <div class="ecx-chat-messages" data-ecx-chat-messages></div>
+        <form class="ecx-chat-form" data-ecx-chat-form>
+          <textarea data-ecx-chat-input rows="3" placeholder="围绕当前文章提问"></textarea>
+          <button type="submit">发送</button>
+        </form>
+      </section>
+
+      <section class="ecx-panel" data-ecx-panel="annotations" hidden>
+        <div class="ecx-section-header">
+          <strong>笔记与高亮</strong>
+          <button type="button" data-ecx-refresh-annotations>刷新</button>
+        </div>
+        <div class="ecx-annotation-list" data-ecx-annotation-list></div>
+      </section>
+
+      <section class="ecx-panel" data-ecx-panel="settings" hidden>
+        <form class="ecx-settings-form" data-ecx-settings-form>
+          <label>
+            <span>文章保存接口</span>
+            <input name="articleSaveEndpoint" type="url" placeholder="http://127.0.0.1:1234/api/articles">
+          </label>
+          <label>
+            <span>大模型 API 地址</span>
+            <input name="chatApiEndpoint" type="url" placeholder="https://api.example.com/v1/chat/completions">
+          </label>
+          <label>
+            <span>API Key</span>
+            <input name="chatApiKey" type="password" placeholder="可选">
+          </label>
+          <div class="ecx-settings-row">
+            <label>
+              <span>模型</span>
+              <input name="chatModel" type="text" placeholder="gpt-4o-mini">
+            </label>
+            <label>
+              <span>温度</span>
+              <input name="chatTemperature" type="number" min="0" max="2" step="0.1">
+            </label>
+          </div>
+          <button type="submit">保存设置</button>
+        </form>
+
+        <div class="ecx-debugger">
+          <strong>文章保存接口调试</strong>
+          <label>
+            <span>完整请求，可编辑 JSON</span>
+            <textarea data-ecx-save-debug-request rows="10" spellcheck="false"></textarea>
+          </label>
+          <div class="ecx-two-columns">
+            <button type="button" data-ecx-build-save-debug-request>生成保存请求</button>
+            <button type="button" data-ecx-send-save-debug-request>发送保存请求</button>
+          </div>
+          <pre data-ecx-save-debug-response>尚未发送保存文章调试请求。</pre>
+        </div>
+
+        <div class="ecx-debugger">
+          <strong>大模型接口调试</strong>
+          <label>
+            <span>测试问题</span>
+            <input data-ecx-debug-question type="text" value="请用三句话概括这篇文章。">
+          </label>
+          <pre data-ecx-debug-config>使用上方已保存的大模型 API 地址、API Key、模型和温度。</pre>
+          <label>
+            <span>请求 Body，可编辑 JSON</span>
+            <textarea data-ecx-debug-body rows="10" spellcheck="false"></textarea>
+          </label>
+          <div class="ecx-two-columns">
+            <button type="button" data-ecx-build-debug-request>生成请求体</button>
+            <button type="button" data-ecx-send-debug-request>发送调试请求</button>
+          </div>
+          <pre data-ecx-debug-response>尚未发送调试请求。</pre>
+        </div>
+      </section>
+    </main>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

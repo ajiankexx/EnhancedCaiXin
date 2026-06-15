@@ -19,6 +19,8 @@
     selectedListFolderId: ""
   };
 
+  let statusTimer = null;
+
   function sendMessage(message) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, (response) => {
@@ -37,11 +39,26 @@
 
   function setStatus(text, tone = "muted") {
     const element = document.querySelector("[data-ecx-status]");
-    if (!element) {
+    if (element) {
+      element.textContent = text;
+      element.dataset.tone = tone;
       return;
     }
-    element.textContent = text;
-    element.dataset.tone = tone;
+
+    let toast = document.querySelector("[data-ecx-page-status]");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.className = "ecx-page-status";
+      toast.dataset.ecxPageStatus = "true";
+      document.documentElement.appendChild(toast);
+    }
+    toast.textContent = text;
+    toast.dataset.tone = tone;
+    toast.hidden = false;
+    window.clearTimeout(statusTimer);
+    statusTimer = window.setTimeout(() => {
+      toast.hidden = true;
+    }, tone === "error" ? 5000 : 2600);
   }
 
   async function saveArticle() {
@@ -71,7 +88,7 @@
 
   function isIgnoredTextNode(node) {
     const parent = node.parentElement;
-    return !parent || Boolean(parent.closest("#ecx-control-panel, #ecx-chat-sidebar, .ecx-selection-toolbar, script, style"));
+    return !parent || Boolean(parent.closest(".ecx-page-status, .ecx-selection-toolbar, script, style"));
   }
 
   function buildTextIndex(container) {
@@ -633,6 +650,64 @@
     setStatus("笔记/高亮已删除。", "success");
   }
 
+  function scrollToAnnotation(id) {
+    const annotation = annotationState.annotations.find((item) => String(item.id) === String(id));
+    if (!annotation) {
+      throw new Error("未找到对应笔记/高亮。");
+    }
+
+    let target = Array.from(document.querySelectorAll("mark.ecx-annotation-mark[data-ecx-annotation-id]"))
+      .find((mark) => mark.dataset.ecxAnnotationId === String(id));
+    if (!target) {
+      const container = articleContainer();
+      if (!container) {
+        throw new Error("未能识别正文，无法定位笔记/高亮。");
+      }
+      const index = buildTextIndex(container);
+      let located = rangeFromTextIndex(index, annotation.start_offset, annotation.end_offset);
+      const expected = normalizeText(annotation.selected_text);
+      if (!located || normalizeText(located.text) !== expected) {
+        const fallback = findFallbackOffsets(annotation, index);
+        located = fallback ? rangeFromTextIndex(index, fallback.start, fallback.end) : null;
+      }
+      const rect = located?.range.getBoundingClientRect();
+      if (!rect) {
+        throw new Error("未能在页面中定位笔记/高亮。");
+      }
+      window.scrollTo({
+        top: window.scrollY + rect.top - 96,
+        behavior: "smooth"
+      });
+      return true;
+    }
+
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    return true;
+  }
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    (async () => {
+      if (message.type === "GET_CURRENT_ARTICLE") {
+        annotationState.article = window.EnhancedCaiXinArticleExtractor.extractCurrentArticle();
+        return annotationState.article;
+      }
+      if (message.type === "REFRESH_ANNOTATIONS") {
+        annotationState.article = window.EnhancedCaiXinArticleExtractor.extractCurrentArticle();
+        await loadAnnotations(false);
+        return { refreshed: true };
+      }
+      if (message.type === "SCROLL_TO_ANNOTATION") {
+        scrollToAnnotation(message.id);
+        return { scrolled: true };
+      }
+      throw new Error(`未知页面消息类型：${message.type}`);
+    })()
+      .then((payload) => sendResponse({ ok: true, payload }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
+
+    return true;
+  });
+
   function ensureSelectionToolbar() {
     if (annotationState.toolbar) {
       return annotationState.toolbar;
@@ -828,276 +903,6 @@
     return Math.max(min, Math.min(max, value));
   }
 
-  async function applySavedPanelPosition(panel) {
-    const settings = await sendMessage({ type: "GET_SETTINGS" });
-    if (Number.isFinite(settings.panelLeft) && Number.isFinite(settings.panelTop)) {
-      panel.style.left = `${clamp(settings.panelLeft, 8, window.innerWidth - 80)}px`;
-      panel.style.top = `${clamp(settings.panelTop, 8, window.innerHeight - 48)}px`;
-      panel.style.right = "auto";
-      panel.style.bottom = "auto";
-    }
-  }
-
-  function makePanelDraggable(panel) {
-    const handle = panel.querySelector("[data-ecx-drag-handle]");
-    let dragState = null;
-
-    handle.addEventListener("pointerdown", (event) => {
-      if (event.target.closest("button")) {
-        return;
-      }
-
-      const rect = panel.getBoundingClientRect();
-      dragState = {
-        pointerId: event.pointerId,
-        offsetX: event.clientX - rect.left,
-        offsetY: event.clientY - rect.top
-      };
-      panel.classList.add("ecx-panel-dragging");
-      panel.style.left = `${rect.left}px`;
-      panel.style.top = `${rect.top}px`;
-      panel.style.right = "auto";
-      panel.style.bottom = "auto";
-      handle.setPointerCapture(event.pointerId);
-      event.preventDefault();
-    });
-
-    handle.addEventListener("pointermove", (event) => {
-      if (!dragState || event.pointerId !== dragState.pointerId) {
-        return;
-      }
-
-      const maxLeft = Math.max(8, window.innerWidth - panel.offsetWidth - 8);
-      const maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8);
-      const left = clamp(event.clientX - dragState.offsetX, 8, maxLeft);
-      const top = clamp(event.clientY - dragState.offsetY, 8, maxTop);
-      panel.style.left = `${left}px`;
-      panel.style.top = `${top}px`;
-    });
-
-    async function stopDragging(event) {
-      if (!dragState || event.pointerId !== dragState.pointerId) {
-        return;
-      }
-
-      const rect = panel.getBoundingClientRect();
-      dragState = null;
-      panel.classList.remove("ecx-panel-dragging");
-      await sendMessage({
-        type: "SAVE_SETTINGS",
-        settings: {
-          panelLeft: Math.round(rect.left),
-          panelTop: Math.round(rect.top)
-        }
-      });
-    }
-
-    handle.addEventListener("pointerup", stopDragging);
-    handle.addEventListener("pointercancel", stopDragging);
-  }
-
-  function createControlPanel() {
-    const panel = document.createElement("section");
-    panel.id = "ecx-control-panel";
-    panel.innerHTML = `
-      <div class="ecx-panel-header" data-ecx-drag-handle title="拖动移动面板">
-        <div>
-          <div class="ecx-panel-title">Enhanced CaiXin</div>
-          <div class="ecx-panel-subtitle">文章保存与上下文对话，可拖动</div>
-        </div>
-        <button class="ecx-icon-button" type="button" data-ecx-collapse aria-label="收起">−</button>
-      </div>
-      <div class="ecx-panel-body">
-        <button class="ecx-primary-button" type="button" data-ecx-save>保存当前文章到 MySQL</button>
-        <button class="ecx-secondary-button" type="button" data-ecx-toggle-favorites>收藏</button>
-        <button class="ecx-secondary-button" type="button" data-ecx-chat>打开文章对话侧边栏</button>
-        <button class="ecx-secondary-button" type="button" data-ecx-toggle-annotations>笔记/高亮</button>
-        <button class="ecx-link-button" type="button" data-ecx-toggle-settings>接口设置</button>
-        <div class="ecx-status" data-ecx-status data-tone="muted">等待操作。</div>
-        <div class="ecx-favorites-panel" data-ecx-favorites hidden>
-          <div class="ecx-favorites-header">
-            <div class="ecx-favorites-title">当前文章收藏夹</div>
-            <button type="button" data-ecx-refresh-favorites>刷新</button>
-          </div>
-          <div class="ecx-favorite-folder-list" data-ecx-favorite-folder-list>
-            <div class="ecx-favorite-empty">正在加载...</div>
-          </div>
-          <div class="ecx-favorite-actions">
-            <button type="button" data-ecx-save-favorite>保存收藏</button>
-            <button type="button" data-ecx-delete-favorite>删除文章</button>
-          </div>
-          <div class="ecx-favorite-create">
-            <input type="text" data-ecx-new-favorite-folder placeholder="新收藏夹名称">
-            <button type="button" data-ecx-create-favorite-folder>新建</button>
-          </div>
-          <div class="ecx-favorites-header">
-            <div class="ecx-favorites-title">收藏列表</div>
-            <select data-ecx-favorite-list-folder aria-label="收藏夹筛选">
-              <option value="">全部收藏夹</option>
-            </select>
-          </div>
-          <div class="ecx-favorite-list" data-ecx-favorite-list>
-            <div class="ecx-favorite-empty">正在加载...</div>
-          </div>
-        </div>
-        <div class="ecx-annotations-panel" data-ecx-annotations hidden>
-          <div class="ecx-annotations-header">
-            <div class="ecx-annotations-title">笔记与高亮</div>
-            <button type="button" data-ecx-refresh-annotations>刷新</button>
-          </div>
-          <div class="ecx-annotation-list" data-ecx-annotation-list>
-            <div class="ecx-annotation-empty">正在加载...</div>
-          </div>
-        </div>
-        <div class="ecx-settings" data-ecx-settings hidden>
-          <form data-ecx-settings-form>
-            <label>
-              <span>文章保存接口</span>
-              <input name="articleSaveEndpoint" type="url" placeholder="http://127.0.0.1:1234/api/articles">
-            </label>
-            <label>
-              <span>大模型 API 地址</span>
-              <input name="chatApiEndpoint" type="url" placeholder="https://api.example.com/v1/chat/completions">
-            </label>
-            <label>
-              <span>API Key</span>
-              <input name="chatApiKey" type="password" placeholder="可选">
-            </label>
-            <div class="ecx-settings-row">
-              <label>
-                <span>模型</span>
-                <input name="chatModel" type="text" placeholder="gpt-4o-mini">
-              </label>
-              <label>
-                <span>温度</span>
-                <input name="chatTemperature" type="number" min="0" max="2" step="0.1">
-              </label>
-            </div>
-            <button type="submit">保存设置</button>
-          </form>
-          <div class="ecx-debugger">
-            <div class="ecx-debugger-title">文章保存接口调试</div>
-            <label>
-              <span>完整请求，可编辑 JSON</span>
-              <textarea data-ecx-save-debug-request rows="12" spellcheck="false"></textarea>
-            </label>
-            <div class="ecx-debugger-actions">
-              <button type="button" data-ecx-build-save-debug-request>生成保存请求</button>
-              <button type="button" data-ecx-send-save-debug-request>发送保存请求</button>
-            </div>
-            <label>
-              <span>保存接口响应</span>
-              <pre data-ecx-save-debug-response>尚未发送保存文章调试请求。</pre>
-            </label>
-          </div>
-          <div class="ecx-debugger">
-            <div class="ecx-debugger-title">大模型接口调试</div>
-            <label>
-              <span>测试问题</span>
-              <input data-ecx-debug-question type="text" value="请用三句话概括这篇文章。">
-            </label>
-            <pre class="ecx-debug-config" data-ecx-debug-config>使用上方已保存的大模型 API 地址、API Key、模型和温度。</pre>
-            <label>
-              <span>请求 Body，可编辑 JSON</span>
-              <textarea data-ecx-debug-body rows="10" spellcheck="false"></textarea>
-            </label>
-            <div class="ecx-debugger-actions">
-              <button type="button" data-ecx-build-debug-request>生成请求体</button>
-              <button type="button" data-ecx-send-debug-request>发送调试请求</button>
-            </div>
-            <label>
-              <span>返回结果</span>
-              <pre data-ecx-debug-response>尚未发送调试请求。</pre>
-            </label>
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.documentElement.appendChild(panel);
-    makePanelDraggable(panel);
-    applySavedPanelPosition(panel).catch(() => {});
-    panel.querySelector("[data-ecx-save]").addEventListener("click", saveArticle);
-    panel.querySelector("[data-ecx-toggle-favorites]").addEventListener("click", async () => {
-      const favorites = panel.querySelector("[data-ecx-favorites]");
-      favorites.hidden = !favorites.hidden;
-      if (!favorites.hidden) {
-        await loadFavoritesPanel(panel, true);
-      }
-    });
-    panel.querySelector("[data-ecx-refresh-favorites]").addEventListener("click", () => {
-      loadFavoritesPanel(panel, true);
-    });
-    panel.querySelector("[data-ecx-save-favorite]").addEventListener("click", () => {
-      saveFavoriteSelection(panel).catch((error) => setStatus(error.message || String(error), "error"));
-    });
-    panel.querySelector("[data-ecx-delete-favorite]").addEventListener("click", () => {
-      deleteArticleFavorite(panel).catch((error) => setStatus(error.message || String(error), "error"));
-    });
-    panel.querySelector("[data-ecx-create-favorite-folder]").addEventListener("click", () => {
-      createFavoriteFolder(panel).catch((error) => setStatus(error.message || String(error), "error"));
-    });
-    panel.querySelector("[data-ecx-new-favorite-folder]").addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        createFavoriteFolder(panel).catch((error) => setStatus(error.message || String(error), "error"));
-      }
-    });
-    panel.querySelector("[data-ecx-favorite-list-folder]").addEventListener("change", (event) => {
-      favoriteState.selectedListFolderId = event.currentTarget.value;
-      loadFavoriteList(panel);
-    });
-    panel.querySelector("[data-ecx-chat]").addEventListener("click", () => {
-      window.EnhancedCaiXinChatSidebar.open();
-    });
-    panel.querySelector("[data-ecx-toggle-annotations]").addEventListener("click", async () => {
-      const annotations = panel.querySelector("[data-ecx-annotations]");
-      annotations.hidden = !annotations.hidden;
-      if (!annotations.hidden) {
-        await loadAnnotations(true);
-      }
-    });
-    panel.querySelector("[data-ecx-refresh-annotations]").addEventListener("click", () => {
-      loadAnnotations(true);
-    });
-    panel.querySelector("[data-ecx-annotation-list]").addEventListener("click", (event) => {
-      const button = event.target.closest("[data-ecx-delete-annotation]");
-      if (!button) {
-        return;
-      }
-      deleteAnnotation(button.dataset.ecxDeleteAnnotation).catch((error) => {
-        setStatus(error.message || String(error), "error");
-      });
-    });
-    panel.querySelector("[data-ecx-collapse]").addEventListener("click", () => {
-      panel.classList.toggle("ecx-panel-collapsed");
-    });
-    panel.querySelector("[data-ecx-toggle-settings]").addEventListener("click", async () => {
-      const settings = panel.querySelector("[data-ecx-settings]");
-      settings.hidden = !settings.hidden;
-      if (!settings.hidden) {
-        await loadSettings(panel.querySelector("[data-ecx-settings-form]"));
-      }
-    });
-    panel.querySelector("[data-ecx-settings-form]").addEventListener("submit", saveSettings);
-    panel.querySelector("[data-ecx-build-save-debug-request]").addEventListener("click", () => {
-      buildSaveDebugRequest(panel);
-    });
-    panel.querySelector("[data-ecx-send-save-debug-request]").addEventListener("click", () => {
-      sendSaveDebugRequest(panel);
-    });
-    panel.querySelector("[data-ecx-build-debug-request]").addEventListener("click", () => {
-      buildDebugRequest(panel);
-    });
-    panel.querySelector("[data-ecx-send-debug-request]").addEventListener("click", () => {
-      sendDebugRequest(panel);
-    });
-  }
-
-  createControlPanel();
   bindAnnotationSelection();
   loadAnnotations(false);
-  loadFavoriteFolders(document.querySelector("#ecx-control-panel")).then(() => {
-    return loadArticleFavorite(document.querySelector("#ecx-control-panel"), false);
-  }).catch(() => {});
 })();

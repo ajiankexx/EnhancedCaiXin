@@ -8,6 +8,12 @@ const DEFAULTS = {
   panelTop: null
 };
 
+if (chrome.sidePanel?.setPanelBehavior) {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.error(error));
+}
+
 async function getSettings() {
   return chrome.storage.sync.get(DEFAULTS);
 }

@@ -1,136 +1,41 @@
-#ecx-control-panel,
-#ecx-chat-sidebar,
+.ecx-page-status,
 .ecx-selection-toolbar {
   color: #1f2933;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   box-sizing: border-box;
 }
 
-#ecx-control-panel *,
-#ecx-chat-sidebar *,
+.ecx-page-status *,
 .ecx-selection-toolbar * {
   box-sizing: border-box;
 }
 
-#ecx-control-panel {
+.ecx-page-status {
   position: fixed;
   right: 24px;
   bottom: 24px;
   z-index: 2147483647;
-  width: 380px;
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 32px);
-  background: #ffffff;
+  max-width: min(360px, calc(100vw - 32px));
   border: 1px solid #d7dde5;
   border-radius: 8px;
+  background: #ffffff;
   box-shadow: 0 12px 36px rgba(15, 23, 42, 0.18);
-  overflow: hidden;
-}
-
-.ecx-panel-header,
-.ecx-chat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  background: #f7f9fc;
-  border-bottom: 1px solid #e1e6ef;
-}
-
-.ecx-panel-header {
-  cursor: move;
-  user-select: none;
-  touch-action: none;
-}
-
-.ecx-panel-dragging {
-  opacity: 0.96;
-}
-
-.ecx-panel-title,
-.ecx-chat-title {
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.ecx-panel-subtitle,
-.ecx-chat-subtitle {
+  padding: 10px 12px;
   color: #667085;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.ecx-icon-button {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #cfd7e3;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #344054;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.ecx-panel-body {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  max-height: calc(100vh - 96px);
-  overflow-y: auto;
-}
-
-.ecx-panel-collapsed .ecx-panel-body {
-  display: none;
-}
-
-.ecx-primary-button,
-.ecx-secondary-button,
-.ecx-link-button,
-.ecx-settings button,
-.ecx-chat-form button {
-  min-height: 36px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.ecx-primary-button {
-  background: #1255cc;
-  color: #ffffff;
-}
-
-.ecx-secondary-button,
-.ecx-settings button,
-.ecx-chat-form button {
-  background: #202b3c;
-  color: #ffffff;
-}
-
-.ecx-link-button {
-  background: #ffffff;
-  color: #1255cc;
-  border-color: #c8d7f4;
-}
-
-.ecx-status {
-  min-height: 20px;
-  color: #667085;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
-  word-break: break-word;
 }
 
-.ecx-status[data-tone="success"] {
+.ecx-page-status[data-tone="success"] {
   color: #067647;
 }
 
-.ecx-status[data-tone="error"] {
+.ecx-page-status[data-tone="error"] {
   color: #b42318;
+}
+
+.ecx-page-status[hidden] {
+  display: none;
 }
 
 .ecx-annotation-mark {
@@ -157,367 +62,18 @@
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.2);
 }
 
-.ecx-selection-toolbar[hidden],
-.ecx-annotations-panel[hidden],
-.ecx-favorites-panel[hidden] {
+.ecx-selection-toolbar[hidden] {
   display: none;
 }
 
-.ecx-selection-toolbar button,
-.ecx-annotations-header button,
-.ecx-annotation-item button,
-.ecx-favorites-header button,
-.ecx-favorite-actions button,
-.ecx-favorite-create button {
+.ecx-selection-toolbar button {
   min-height: 30px;
   border: 1px solid #c8d7f4;
   border-radius: 6px;
   background: #ffffff;
   color: #1255cc;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.ecx-annotations-panel {
-  display: grid;
-  gap: 10px;
-  border-top: 1px solid #edf1f7;
-  padding-top: 10px;
-}
-
-.ecx-favorites-panel {
-  display: grid;
-  gap: 10px;
-  border-top: 1px solid #edf1f7;
-  padding-top: 10px;
-}
-
-.ecx-annotations-header,
-.ecx-favorites-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.ecx-annotations-title,
-.ecx-favorites-title {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.ecx-favorites-header select {
-  min-width: 128px;
-  max-width: 180px;
-  height: 30px;
-  border: 1px solid #cfd7e3;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #344054;
-  font-size: 12px;
-}
-
-.ecx-annotation-list {
-  display: grid;
-  gap: 8px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.ecx-favorite-folder-list {
-  display: grid;
-  gap: 6px;
-  max-height: 140px;
-  overflow-y: auto;
-}
-
-.ecx-favorite-folder-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #e1e6ef;
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: #fbfcfe;
-  color: #344054;
-  font-size: 13px;
-}
-
-.ecx-favorite-actions,
-.ecx-favorite-create {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.ecx-favorite-create input {
-  width: 100%;
-  height: 32px;
-  border: 1px solid #cfd7e3;
-  border-radius: 6px;
-  padding: 6px 8px;
-  background: #ffffff;
-  color: #111827;
   font: inherit;
-  font-size: 13px;
-}
-
-.ecx-favorite-list {
-  display: grid;
-  gap: 8px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.ecx-favorite-item {
-  display: grid;
-  gap: 6px;
-  border: 1px solid #e1e6ef;
-  border-radius: 8px;
-  padding: 10px;
-  background: #fbfcfe;
-}
-
-.ecx-favorite-title {
-  color: #1255cc;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  line-height: 1.45;
-  text-decoration: none;
-  word-break: break-word;
-}
-
-.ecx-favorite-title:hover {
-  text-decoration: underline;
-}
-
-.ecx-favorite-meta {
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.ecx-annotation-empty,
-.ecx-favorite-empty {
-  color: #667085;
-  border: 1px dashed #cfd7e3;
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.ecx-annotation-item {
-  display: grid;
-  gap: 7px;
-  border: 1px solid #e1e6ef;
-  border-radius: 8px;
-  padding: 10px;
-  background: #fbfcfe;
-}
-
-.ecx-annotation-meta,
-.ecx-annotation-missing {
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.ecx-annotation-quote {
-  color: #1f2933;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.ecx-annotation-note {
-  color: #344054;
-  border-left: 3px solid #f2b705;
-  padding-left: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.ecx-annotation-item button {
-  justify-self: start;
-  color: #b42318;
-  border-color: #f2b8b5;
-}
-
-.ecx-settings {
-  border-top: 1px solid #edf1f7;
-  padding-top: 10px;
-}
-
-.ecx-settings form {
-  display: grid;
-  gap: 10px;
-}
-
-.ecx-settings label {
-  display: grid;
-  gap: 4px;
-  color: #344054;
-  font-size: 12px;
-}
-
-.ecx-settings-row {
-  display: grid;
-  grid-template-columns: 1fr 82px;
-  gap: 8px;
-}
-
-.ecx-settings input,
-.ecx-settings textarea,
-.ecx-chat-form textarea {
-  width: 100%;
-  border: 1px solid #cfd7e3;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #111827;
-  font: inherit;
-  font-size: 13px;
-}
-
-.ecx-settings input {
-  height: 34px;
-  padding: 6px 8px;
-}
-
-.ecx-settings textarea {
-  min-height: 88px;
-  padding: 8px;
-  line-height: 1.45;
-  resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-
-.ecx-debugger {
-  display: grid;
-  gap: 10px;
-  border-top: 1px solid #edf1f7;
-  margin-top: 12px;
-  padding-top: 12px;
-}
-
-.ecx-debugger-title {
-  color: #1f2933;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.ecx-debugger-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.ecx-debugger pre {
-  max-height: 240px;
-  margin: 0;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  border: 1px solid #cfd7e3;
-  border-radius: 6px;
-  background: #0f172a;
-  color: #e5e7eb;
-  padding: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-#ecx-chat-sidebar {
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 2147483646;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  width: min(560px, 46vw);
-  min-width: 420px;
-  height: 100vh;
-  background: #ffffff;
-  border-left: 1px solid #d7dde5;
-  box-shadow: -18px 0 42px rgba(15, 23, 42, 0.2);
-  transform: translateX(105%);
-  transition: transform 160ms ease;
-}
-
-#ecx-chat-sidebar.ecx-chat-sidebar-open {
-  transform: translateX(0);
-}
-
-.ecx-chat-messages {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  overflow-y: auto;
-  background: #fbfcfe;
-}
-
-.ecx-chat-empty {
-  color: #667085;
-  border: 1px dashed #cfd7e3;
-  border-radius: 8px;
-  padding: 14px;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.ecx-chat-bubble {
-  max-width: 88%;
-  white-space: pre-wrap;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 14px;
-  line-height: 1.65;
-}
-
-.ecx-chat-bubble-user {
-  align-self: flex-end;
-  background: #1255cc;
-  color: #ffffff;
-}
-
-.ecx-chat-bubble-assistant {
-  align-self: flex-start;
-  background: #eef2f7;
-  color: #1f2933;
-}
-
-.ecx-chat-form {
-  display: grid;
-  grid-template-columns: 1fr 88px;
-  gap: 10px;
-  padding: 12px;
-  border-top: 1px solid #e1e6ef;
-  background: #ffffff;
-}
-
-.ecx-chat-form textarea {
-  min-height: 76px;
-  max-height: 180px;
-  resize: vertical;
-  padding: 9px 10px;
-  line-height: 1.5;
-}
-
-@media (max-width: 760px) {
-  #ecx-control-panel {
-    right: 12px;
-    bottom: 12px;
-    width: calc(100vw - 24px);
-  }
-
-  #ecx-chat-sidebar {
-    width: 100vw;
-    min-width: 0;
-  }
-
-  .ecx-chat-form {
-    grid-template-columns: 1fr;
-  }
 }
