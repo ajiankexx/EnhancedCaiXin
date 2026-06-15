@@ -39,6 +39,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("POST /api/articles", s.handleCreateArticle)
 	s.mux.HandleFunc("GET /api/articles/{caixinID}", s.handleGetArticle)
+	s.mux.HandleFunc("DELETE /api/articles/{caixinID}", s.handleDeleteArticle)
 	s.mux.HandleFunc("GET /api/articles/{caixinID}/annotations", s.handleListAnnotations)
 	s.mux.HandleFunc("POST /api/articles/{caixinID}/annotations", s.handleCreateAnnotation)
 	s.mux.HandleFunc("DELETE /api/annotations/{id}", s.handleDeleteAnnotation)
@@ -131,6 +132,27 @@ func (s *Server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 		"ok":      true,
 		"article": article,
 	})
+}
+
+func (s *Server) handleDeleteArticle(w http.ResponseWriter, r *http.Request) {
+	caixinID := strings.TrimSpace(r.PathValue("caixinID"))
+	if caixinID == "" {
+		writeError(w, http.StatusBadRequest, "caixin_id is required")
+		return
+	}
+
+	if err := s.articles.DeleteByCaixinID(r.Context(), caixinID); err != nil {
+		if errors.Is(err, database.ErrArticleNotFound) {
+			writeError(w, http.StatusNotFound, "article not found")
+			return
+		}
+		s.logger.Error("delete article failed", "error", err, "caixin_id", caixinID)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.logger.Info("article deleted", "caixin_id", caixinID)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleListAnnotations(w http.ResponseWriter, r *http.Request) {

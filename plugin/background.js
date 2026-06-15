@@ -142,11 +142,11 @@ async function saveArticleFavorite(caixinID, folderIDs) {
 
 async function deleteArticleFavorite(caixinID) {
   const settings = await getSettings();
-  const endpoint = `${apiEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}/favorite`;
+  const endpoint = `${apiEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}`;
   const response = await fetch(endpoint, { method: "DELETE" });
   const data = await parseJSONResponse(response);
   if (!response.ok) {
-    throw new Error(data?.error || `取消收藏失败：HTTP ${response.status}`);
+    throw new Error(data?.error || `删除文章失败：HTTP ${response.status}`);
   }
   return data;
 }

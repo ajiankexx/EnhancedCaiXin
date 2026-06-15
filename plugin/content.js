@@ -8,6 +8,7 @@
     article: null,
     annotations: [],
     locatedIds: new Set(),
+    highlightNames: new Set(),
     toolbar: null
   };
 
@@ -123,8 +124,7 @@
     return previous ? { node: previous.node, offset: previous.offset + 1 } : null;
   }
 
-  function rangeFromOffsets(container, startOffset, endOffset) {
-    const index = buildTextIndex(container);
+  function rangeFromTextIndex(index, startOffset, endOffset) {
     if (startOffset < 0 || endOffset > index.positions.length || endOffset <= startOffset) {
       return null;
     }
@@ -188,7 +188,55 @@
     range.insertNode(mark);
   }
 
+  function supportsCustomHighlights() {
+    return typeof Highlight !== "undefined" && Boolean(window.CSS?.highlights);
+  }
+
+  function annotationHighlightName(annotation) {
+    return `ecx-annotation-${String(annotation.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  }
+
+  function escapeCSSIdentifier(value) {
+    if (window.CSS?.escape) {
+      return window.CSS.escape(value);
+    }
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  function annotationHighlightStyleElement() {
+    let style = document.querySelector("style[data-ecx-annotation-highlights]");
+    if (!style) {
+      style = document.createElement("style");
+      style.dataset.ecxAnnotationHighlights = "true";
+      document.head.appendChild(style);
+    }
+    return style;
+  }
+
+  function setRenderedAnnotationHighlight(annotation, range, styleRules) {
+    const name = annotationHighlightName(annotation);
+    const highlight = new Highlight(range);
+    highlight.priority = annotation.type === "note" ? 2 : 1;
+    window.CSS.highlights.set(name, highlight);
+    annotationState.highlightNames.add(name);
+
+    const selectorName = escapeCSSIdentifier(name);
+    if (annotation.type === "note") {
+      styleRules.push(`::highlight(${selectorName}) { background-color: rgba(255, 224, 138, 0.72); text-decoration: underline; text-decoration-color: #d97706; text-decoration-thickness: 2px; }`);
+    } else {
+      styleRules.push(`::highlight(${selectorName}) { background-color: rgba(255, 243, 163, 0.72); }`);
+    }
+  }
+
   function clearRenderedAnnotations() {
+    if (supportsCustomHighlights()) {
+      annotationState.highlightNames.forEach((name) => window.CSS.highlights.delete(name));
+      annotationState.highlightNames = new Set();
+    }
+    const style = document.querySelector("style[data-ecx-annotation-highlights]");
+    if (style) {
+      style.textContent = "";
+    }
     document.querySelectorAll("mark.ecx-annotation-mark[data-ecx-annotation-id]").forEach((mark) => {
       const parent = mark.parentNode;
       while (mark.firstChild) {
@@ -200,16 +248,6 @@
     annotationState.locatedIds = new Set();
   }
 
-  function rangesOverlap(aStart, aEnd, bStart, bEnd) {
-    return aStart < bEnd && bStart < aEnd;
-  }
-
-  function hasOverlappingAnnotation(startOffset, endOffset) {
-    return annotationState.annotations.some((annotation) => (
-      rangesOverlap(startOffset, endOffset, annotation.start_offset, annotation.end_offset)
-    ));
-  }
-
   function renderAnnotations() {
     const container = articleContainer();
     clearRenderedAnnotations();
@@ -218,20 +256,30 @@
       return;
     }
 
+    const customHighlights = supportsCustomHighlights();
+    const styleRules = [];
     const annotations = [...annotationState.annotations].sort((a, b) => b.start_offset - a.start_offset);
+    const index = customHighlights ? buildTextIndex(container) : null;
     for (const annotation of annotations) {
-      let located = rangeFromOffsets(container, annotation.start_offset, annotation.end_offset);
+      let currentIndex = index || buildTextIndex(container);
+      let located = rangeFromTextIndex(currentIndex, annotation.start_offset, annotation.end_offset);
       const expected = normalizeText(annotation.selected_text);
       if (!located || normalizeText(located.text) !== expected) {
-        const index = buildTextIndex(container);
-        const fallback = findFallbackOffsets(annotation, index);
-        located = fallback ? rangeFromOffsets(container, fallback.start, fallback.end) : null;
+        const fallback = findFallbackOffsets(annotation, currentIndex);
+        located = fallback ? rangeFromTextIndex(currentIndex, fallback.start, fallback.end) : null;
       }
       if (!located) {
         continue;
       }
-      wrapRange(located.range, annotation);
+      if (customHighlights) {
+        setRenderedAnnotationHighlight(annotation, located.range, styleRules);
+      } else {
+        wrapRange(located.range, annotation);
+      }
       annotationState.locatedIds.add(Number(annotation.id));
+    }
+    if (customHighlights) {
+      annotationHighlightStyleElement().textContent = styleRules.join("\n");
     }
     renderAnnotationList();
   }
@@ -427,7 +475,7 @@
 
   async function deleteArticleFavorite(panel) {
     const article = currentArticle();
-    setStatus("正在取消收藏...", "muted");
+    setStatus("正在删除文章...", "muted");
     await sendMessage({
       type: "DELETE_ARTICLE_FAVORITE",
       caixinID: article.caixin_id
@@ -436,7 +484,7 @@
     renderFavoriteFolderOptions(panel);
     updateFavoriteButton(panel);
     await loadFavoriteList(panel);
-    setStatus("已取消收藏。", "success");
+    setStatus("文章已从数据库删除。", "success");
   }
 
   async function createFavoriteFolder(panel) {
@@ -541,9 +589,6 @@
     const offsets = selectionOffsets(container, range);
     if (!offsets.selectedText) {
       throw new Error("选中文本为空。");
-    }
-    if (hasOverlappingAnnotation(offsets.startOffset, offsets.endOffset)) {
-      throw new Error("当前选区与已有高亮重叠，请重新选择更小范围。");
     }
 
     const index = buildTextIndex(container);
@@ -879,7 +924,7 @@
           </div>
           <div class="ecx-favorite-actions">
             <button type="button" data-ecx-save-favorite>保存收藏</button>
-            <button type="button" data-ecx-delete-favorite>取消收藏</button>
+            <button type="button" data-ecx-delete-favorite>删除文章</button>
           </div>
           <div class="ecx-favorite-create">
             <input type="text" data-ecx-new-favorite-folder placeholder="新收藏夹名称">

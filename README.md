@@ -79,5 +79,6 @@ go run ./cmd/server
 - `POST /api/favorite-folders`: 创建收藏夹，请求体为 `{ "name": "收藏夹名称" }`。
 - `GET /api/articles/{caixin_id}/favorite`: 查询文章收藏状态。
 - `POST /api/articles/{caixin_id}/favorite`: 保存文章收藏夹，请求体为 `{ "folder_ids": [1, 2] }`；空数组会使用默认收藏夹。
+- `DELETE /api/articles/{caixin_id}`: 删除文章数据库记录；收藏关联和笔记会随外键级联删除。
 - `DELETE /api/articles/{caixin_id}/favorite`: 取消收藏文章。
 - `GET /api/favorites?folder_id=1&limit=50&offset=0`: 查询收藏文章列表。

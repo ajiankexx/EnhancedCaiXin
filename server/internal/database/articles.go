@@ -71,6 +71,25 @@ func (s *ArticleStore) FindByURL(ctx context.Context, url string) (Article, erro
 	return s.findOne(ctx, "url = ?", url)
 }
 
+func (s *ArticleStore) DeleteByCaixinID(ctx context.Context, caixinID string) error {
+	result, err := s.db.ExecContext(ctx, `
+DELETE FROM articles
+WHERE caixin_id = ?
+`, caixinID)
+	if err != nil {
+		return err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrArticleNotFound
+	}
+	return nil
+}
+
 func (s *ArticleStore) findOne(ctx context.Context, where string, arg any) (Article, error) {
 	row := s.db.QueryRowContext(ctx, `
 SELECT id, caixin_id, url, title, author, catagory, publish_time,

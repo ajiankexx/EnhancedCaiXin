@@ -11,6 +11,7 @@ http://127.0.0.1:1234
 - `GET /healthz`: 健康检查。
 - `POST /api/articles`: 保存文章，供插件默认配置调用；如果 `caixin_id` 已存在，则直接返回已有记录，不重复写入。
 - `GET /api/articles/{caixin_id}`: 按财新文章 ID 查询文章。
+- `DELETE /api/articles/{caixin_id}`: 删除文章数据库记录；收藏关联和笔记会随外键级联删除。
 - `GET /api/favorite-folders`: 查询收藏夹。
 - `POST /api/favorite-folders`: 创建收藏夹。
 - `GET /api/articles/{caixin_id}/favorite`: 查询文章收藏状态。
