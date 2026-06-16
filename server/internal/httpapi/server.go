@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -16,11 +17,12 @@ type Server struct {
 	articles    *database.ArticleStore
 	annotations *database.AnnotationStore
 	favorites   *database.FavoriteStore
+	wordNotes   *database.WordNoteStore
 	logger      *slog.Logger
 	mux         *http.ServeMux
 }
 
-func NewServer(articles *database.ArticleStore, annotations *database.AnnotationStore, favorites *database.FavoriteStore, logger *slog.Logger) http.Handler {
+func NewServer(articles *database.ArticleStore, annotations *database.AnnotationStore, favorites *database.FavoriteStore, wordNotes *database.WordNoteStore, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -28,6 +30,7 @@ func NewServer(articles *database.ArticleStore, annotations *database.Annotation
 		articles:    articles,
 		annotations: annotations,
 		favorites:   favorites,
+		wordNotes:   wordNotes,
 		logger:      logger,
 		mux:         http.NewServeMux(),
 	}
@@ -50,6 +53,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/articles/{caixinID}/favorite", s.handleSaveArticleFavorite)
 	s.mux.HandleFunc("DELETE /api/articles/{caixinID}/favorite", s.handleDeleteArticleFavorite)
 	s.mux.HandleFunc("GET /api/favorites", s.handleListFavorites)
+	s.mux.HandleFunc("GET /api/word-notes", s.handleListWordNotes)
+	s.mux.HandleFunc("POST /api/word-notes", s.handleSaveWordNote)
+	s.mux.HandleFunc("GET /api/word-notes/{id}", s.handleGetWordNote)
+	s.mux.HandleFunc("DELETE /api/word-notes/{id}", s.handleDeleteWordNote)
+	s.mux.HandleFunc("GET /api/articles/{caixinID}/word-notes", s.handleListArticleWordNotes)
+	s.mux.HandleFunc("POST /api/articles/{caixinID}/word-notes", s.handleSaveArticleWordNote)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -447,6 +456,197 @@ func (s *Server) handleListFavorites(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleListWordNotes(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len([]rune(query)) > 128 {
+		writeError(w, http.StatusBadRequest, "q is too long")
+		return
+	}
+	limit, err := parseIntQuery(r, "limit", 50)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "limit must be an integer")
+		return
+	}
+	offset, err := parseIntQuery(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "offset must be an integer")
+		return
+	}
+
+	notes, err := s.wordNotes.Search(r.Context(), query, limit, offset)
+	if err != nil {
+		s.logger.Error("list word notes failed", "error", err, "query", query, "limit", limit, "offset", offset)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"word_notes": notes,
+	})
+}
+
+func (s *Server) handleSaveWordNote(w http.ResponseWriter, r *http.Request) {
+	var request database.WordNote
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	request.WordName = strings.TrimSpace(request.WordName)
+	request.WordExplanation = strings.TrimSpace(request.WordExplanation)
+	if err := validateWordNote(request.WordName, request.WordExplanation); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	note, err := s.wordNotes.Upsert(r.Context(), request)
+	if err != nil {
+		s.logger.Error("save word note failed", "error", err, "word_name", request.WordName)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"word_note": note,
+	})
+}
+
+func (s *Server) handleGetWordNote(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathUint(w, r.PathValue("id"), "word note id is required")
+	if !ok {
+		return
+	}
+
+	detail, err := s.wordNotes.Detail(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, database.ErrWordNoteNotFound) {
+			writeError(w, http.StatusNotFound, "word note not found")
+			return
+		}
+		s.logger.Error("get word note failed", "error", err, "id", id)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":     true,
+		"detail": detail,
+	})
+}
+
+func (s *Server) handleDeleteWordNote(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathUint(w, r.PathValue("id"), "word note id is required")
+	if !ok {
+		return
+	}
+
+	if err := s.wordNotes.SoftDelete(r.Context(), id); err != nil {
+		if errors.Is(err, database.ErrWordNoteNotFound) {
+			writeError(w, http.StatusNotFound, "word note not found")
+			return
+		}
+		s.logger.Error("delete word note failed", "error", err, "id", id)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleListArticleWordNotes(w http.ResponseWriter, r *http.Request) {
+	caixinID := strings.TrimSpace(r.PathValue("caixinID"))
+	if caixinID == "" {
+		writeError(w, http.StatusBadRequest, "caixin_id is required")
+		return
+	}
+
+	article, err := s.articles.FindByCaixinID(r.Context(), caixinID)
+	if err != nil {
+		if errors.Is(err, database.ErrArticleNotFound) {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"ok":         true,
+				"word_notes": []database.WordNote{},
+			})
+			return
+		}
+		s.logger.Error("list article word notes failed to load article", "error", err, "caixin_id", caixinID)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	notes, err := s.wordNotes.ListByArticleID(r.Context(), article.ID)
+	if err != nil {
+		s.logger.Error("list article word notes failed", "error", err, "caixin_id", article.CaixinID, "article_id", article.ID)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"word_notes": notes,
+	})
+}
+
+func (s *Server) handleSaveArticleWordNote(w http.ResponseWriter, r *http.Request) {
+	article, ok := s.loadArticleByPathCaixinID(w, r, "save article word note")
+	if !ok {
+		return
+	}
+
+	var request struct {
+		WordName        string  `json:"word_name"`
+		WordExplanation string  `json:"word_explanation"`
+		SelectedText    string  `json:"selected_text"`
+		PrefixText      *string `json:"prefix_text,omitempty"`
+		SuffixText      *string `json:"suffix_text,omitempty"`
+		StartOffset     uint    `json:"start_offset"`
+		EndOffset       uint    `json:"end_offset"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	request.WordName = strings.TrimSpace(request.WordName)
+	request.WordExplanation = strings.TrimSpace(request.WordExplanation)
+	request.SelectedText = strings.TrimSpace(request.SelectedText)
+	if request.SelectedText == "" {
+		request.SelectedText = request.WordName
+	}
+	if err := validateWordNote(request.WordName, request.WordExplanation); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if request.EndOffset <= request.StartOffset {
+		writeError(w, http.StatusBadRequest, "end_offset must be greater than start_offset")
+		return
+	}
+
+	detail, err := s.wordNotes.AddSource(r.Context(), database.WordNote{
+		WordName:        request.WordName,
+		WordExplanation: request.WordExplanation,
+	}, database.WordNoteSource{
+		ArticleID:    article.ID,
+		CaixinID:     article.CaixinID,
+		SelectedText: request.SelectedText,
+		PrefixText:   request.PrefixText,
+		SuffixText:   request.SuffixText,
+		StartOffset:  request.StartOffset,
+		EndOffset:    request.EndOffset,
+	})
+	if err != nil {
+		s.logger.Error("save article word note failed", "error", err, "caixin_id", article.CaixinID, "word_name", request.WordName)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":     true,
+		"detail": detail,
+	})
+}
+
 func (s *Server) loadArticleByPathCaixinID(w http.ResponseWriter, r *http.Request, logAction string) (database.Article, bool) {
 	caixinID := strings.TrimSpace(r.PathValue("caixinID"))
 	if caixinID == "" {
@@ -485,18 +685,16 @@ func (s *Server) withRequestLogging(next http.Handler) http.Handler {
 			level = slog.LevelWarn
 		}
 
-		s.logger.Log(r.Context(), level, "http request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"query", r.URL.RawQuery,
-			"status", recorder.status,
-			"bytes", recorder.bytes,
-			"duration_ms", time.Since(startedAt).Milliseconds(),
-			"remote_addr", r.RemoteAddr,
-			"origin", r.Header.Get("Origin"),
-			"user_agent", r.UserAgent(),
-		)
+		s.logger.Log(r.Context(), level, requestLogMessage(r, recorder, time.Since(startedAt)))
 	})
+}
+
+func requestLogMessage(r *http.Request, recorder *statusRecorder, duration time.Duration) string {
+	target := r.URL.Path
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	return fmt.Sprintf("%s %s -> %d (%dms, %dB) from %s", r.Method, target, recorder.status, duration.Milliseconds(), recorder.bytes, r.RemoteAddr)
 }
 
 type statusRecorder struct {
@@ -561,12 +759,34 @@ func parseOptionalUintQuery(r *http.Request, name string) (uint64, error) {
 	return parsed, nil
 }
 
+func parsePathUint(w http.ResponseWriter, value string, message string) (uint64, bool) {
+	id, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
+	if err != nil || id == 0 {
+		writeError(w, http.StatusBadRequest, message)
+		return 0, false
+	}
+	return id, true
+}
+
 func parseIntQuery(r *http.Request, name string, fallback int) (int, error) {
 	value := strings.TrimSpace(r.URL.Query().Get(name))
 	if value == "" {
 		return fallback, nil
 	}
 	return strconv.Atoi(value)
+}
+
+func validateWordNote(wordName string, wordExplanation string) error {
+	if wordName == "" {
+		return errors.New("word_name is required")
+	}
+	if len([]rune(wordName)) > 255 {
+		return errors.New("word_name is too long")
+	}
+	if len([]rune(wordExplanation)) > 12000 {
+		return errors.New("word_explanation is too long")
+	}
+	return nil
 }
 
 func uniqueUint64s(values []uint64) []uint64 {

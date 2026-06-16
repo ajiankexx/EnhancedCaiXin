@@ -82,3 +82,8 @@ go run ./cmd/server
 - `DELETE /api/articles/{caixin_id}`: 删除文章数据库记录；收藏关联和笔记会随外键级联删除。
 - `DELETE /api/articles/{caixin_id}/favorite`: 取消收藏文章。
 - `GET /api/favorites?folder_id=1&limit=50&offset=0`: 查询收藏文章列表。
+- `GET /api/word-notes?q=概念&limit=50&offset=0`: 查询词语笔记。
+- `POST /api/word-notes`: 手动新增或更新词语笔记，请求体为 `{ "word_name": "概念", "word_explanation": "解释" }`。
+- `GET /api/word-notes/{id}`: 查询词语笔记详情和来源上下文。
+- `DELETE /api/word-notes/{id}`: 删除词语笔记。
+- `POST /api/articles/{caixin_id}/word-notes`: 从文章选区保存词语笔记和来源上下文。

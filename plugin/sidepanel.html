@@ -20,6 +20,7 @@
         <button type="button" data-ecx-tab="article" aria-pressed="true">文章</button>
         <button type="button" data-ecx-tab="search" aria-pressed="false">搜索</button>
         <button type="button" data-ecx-tab="favorites" aria-pressed="false">收藏</button>
+        <button type="button" data-ecx-tab="words" aria-pressed="false">词语</button>
         <button type="button" data-ecx-tab="chat" aria-pressed="false">对话</button>
         <button type="button" data-ecx-tab="annotations" aria-pressed="false">笔记</button>
         <button type="button" data-ecx-tab="settings" aria-pressed="false">设置</button>
@@ -66,6 +67,30 @@
           </select>
         </div>
         <div class="ecx-favorite-list" data-ecx-favorite-list></div>
+      </section>
+
+      <section class="ecx-panel" data-ecx-panel="words" hidden>
+        <form class="ecx-word-form" data-ecx-word-form>
+          <div class="ecx-current-word" data-ecx-current-word>未选择当前词语</div>
+          <textarea name="wordExplanation" rows="5" placeholder="输入含义，或先用 LLM 生成后人工核验"></textarea>
+          <div class="ecx-two-columns">
+            <button type="button" data-ecx-generate-word-explanation>LLM 生成</button>
+            <button type="submit">提交</button>
+          </div>
+        </form>
+        <div class="ecx-section-header">
+          <strong>当前文章词语</strong>
+          <button type="button" data-ecx-refresh-words>刷新</button>
+        </div>
+        <div class="ecx-word-chip-list" data-ecx-article-word-list></div>
+        <div class="ecx-section-header">
+          <strong>查询结果</strong>
+        </div>
+        <form class="ecx-inline-form" data-ecx-word-search-form>
+          <input type="search" data-ecx-word-search-input placeholder="查询词语">
+          <button type="submit">搜索</button>
+        </form>
+        <div class="ecx-word-list" data-ecx-word-list></div>
       </section>
 
       <section class="ecx-panel ecx-chat-panel" data-ecx-panel="chat" hidden>

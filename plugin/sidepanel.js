@@ -7,6 +7,11 @@
     favorites: [],
     searchResults: [],
     annotations: [],
+    wordNotes: [],
+    articleWordNotes: [],
+    currentWordNote: null,
+    wordDetail: null,
+    wordDetailsByID: {},
     selectedListFolderId: "",
     messages: []
   };
@@ -91,6 +96,11 @@
     return state.article;
   }
 
+  function extractCaixinIDFromURL(url) {
+    const match = String(url || "").match(/(?:\/|_)(\d{6,})(?:\.html|\/)?(?:[?#].*)?$/);
+    return match ? match[1] : "";
+  }
+
   function favoriteFolderNames(folders) {
     return (folders || []).map((folder) => folder.name).filter(Boolean).join("、");
   }
@@ -106,18 +116,34 @@
     return tabs[0] || null;
   }
 
-  async function loadCurrentArticle() {
+  async function activeTabURL() {
+    try {
+      return (await activeTab())?.url || "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  async function readArticleFromActiveTab() {
     const tab = await activeTab();
     state.activeTabId = tab?.id || null;
+    if (!state.activeTabId) {
+      throw new Error("请先切换到财新文章页。");
+    }
+    return sendTab({ type: "GET_CURRENT_ARTICLE" });
+  }
+
+  async function loadCurrentArticle() {
     state.article = null;
 
     try {
-      state.article = await sendTab({ type: "GET_CURRENT_ARTICLE" });
+      state.article = await readArticleFromActiveTab();
       renderArticle();
       setStatus("已读取当前文章。", "success");
       await Promise.allSettled([
         loadArticleFavorite(false),
-        loadAnnotations(false)
+        loadAnnotations(false),
+        loadArticleWordNotes(false)
       ]);
       return state.article;
     } catch (error) {
@@ -414,6 +440,301 @@
     setStatus("已定位到页面中的笔记/高亮。", "success");
   }
 
+  function renderWordNotes(message = "") {
+    const list = $("[data-ecx-word-list]");
+    if (message) {
+      list.innerHTML = `<div class="ecx-empty">${escapeHTML(message)}</div>`;
+      return;
+    }
+    if (state.wordNotes.length === 0) {
+      list.innerHTML = '<div class="ecx-empty">暂无查询结果。</div>';
+      return;
+    }
+    list.innerHTML = state.wordNotes.map((note) => {
+      const detail = state.wordDetailsByID[String(note.id)];
+      const sources = detail?.sources || [];
+      return `
+        <article class="ecx-word-item ecx-word-result" data-ecx-open-word="${note.id}" role="button" tabindex="0">
+          <div class="ecx-section-header">
+            <span class="ecx-word-title">${escapeHTML(note.word_name)}</span>
+          </div>
+          <div class="ecx-word-explanation">${escapeHTML(note.word_explanation || "暂无含义。")}</div>
+          <div class="ecx-word-meta">关联文本 ${sources.length} 条</div>
+          ${sources.length === 0 ? "" : sources.map((source) => {
+            const article = source.article || {};
+            const title = article.title || source.caixin_id || "未知文章";
+            const context = `${source.prefix_text || ""}${source.selected_text || ""}${source.suffix_text || ""}`;
+            return `
+              <article class="ecx-word-source">
+                <div class="ecx-word-meta">${escapeHTML(title)}</div>
+                <div class="ecx-word-context">${escapeHTML(context)}</div>
+              </article>
+            `;
+          }).join("")}
+        </article>
+      `;
+    }).join("");
+  }
+
+  function renderArticleWordNotes(message = "") {
+    const list = $("[data-ecx-article-word-list]");
+    if (message) {
+      list.innerHTML = `<div class="ecx-empty">${escapeHTML(message)}</div>`;
+      return;
+    }
+    if (state.articleWordNotes.length === 0) {
+      list.innerHTML = '<div class="ecx-empty">当前文章暂无词语。可选中文本后点“术语”。</div>';
+      return;
+    }
+    const currentID = String(state.currentWordNote?.id || "");
+    const currentName = state.currentWordNote?.word_name || "";
+    list.innerHTML = state.articleWordNotes.map((note) => `
+      <button type="button" class="ecx-word-chip" data-ecx-select-word="${note.id}" aria-pressed="${String((currentID && String(note.id) === currentID) || note.word_name === currentName)}">${escapeHTML(note.word_name)}</button>
+    `).join("");
+  }
+
+  function renderCurrentWord() {
+    const label = $("[data-ecx-current-word]");
+    const form = $("[data-ecx-word-form]");
+    if (!state.currentWordNote) {
+      label.textContent = "未选择当前词语";
+      form.elements.wordExplanation.value = "";
+      return;
+    }
+    label.textContent = `当前词语：${state.currentWordNote.word_name}`;
+    form.elements.wordExplanation.value = state.currentWordNote.word_explanation || "";
+    renderArticleWordNotes();
+  }
+
+  function renderWordDetail(message = "") {
+    const detail = $("[data-ecx-word-detail]");
+    if (!detail) {
+      return;
+    }
+    if (message) {
+      detail.innerHTML = `<div class="ecx-empty">${escapeHTML(message)}</div>`;
+      return;
+    }
+    if (!state.wordDetail?.word_note) {
+      detail.innerHTML = "";
+      return;
+    }
+    const note = state.wordDetail.word_note;
+    const sources = state.wordDetail.sources || [];
+    detail.innerHTML = `
+      <div class="ecx-section-header">
+        <strong>${escapeHTML(note.word_name)}</strong>
+        <button type="button" data-ecx-delete-word="${note.id}">删除</button>
+      </div>
+      <div class="ecx-word-explanation">${escapeHTML(note.word_explanation)}</div>
+      <div class="ecx-word-meta">来源 ${sources.length} 条</div>
+      ${sources.length === 0 ? '<div class="ecx-empty">暂无来源上下文。</div>' : sources.map((source) => {
+        const article = source.article || {};
+        const title = article.url
+          ? `<a href="${escapeHTML(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(article.title || article.url)}</a>`
+          : escapeHTML(article.title || source.caixin_id || "未知文章");
+        const context = `${source.prefix_text || ""}${source.selected_text || ""}${source.suffix_text || ""}`;
+        return `
+          <article class="ecx-word-source">
+            <div class="ecx-word-meta">${title}</div>
+            <div class="ecx-word-context">${escapeHTML(context)}</div>
+          </article>
+        `;
+      }).join("")}
+    `;
+  }
+
+  async function loadWordNotes(showStatus = true) {
+    const query = $("[data-ecx-word-search-input]").value.trim();
+    if (!query) {
+      state.wordNotes = [];
+      state.wordDetailsByID = {};
+      renderWordNotes("输入词语后查询。");
+      if (showStatus) {
+        setStatus("已清空词语查询结果。", "muted");
+      }
+      return;
+    }
+    if (showStatus) {
+      setStatus("正在加载词语笔记...", "muted");
+    }
+    try {
+      const response = await sendRuntime({
+        type: "LIST_WORD_NOTES",
+        options: { query, limit: 50, offset: 0 }
+      });
+      state.wordNotes = response.word_notes || [];
+      state.wordDetailsByID = {};
+      const details = await Promise.allSettled(
+        state.wordNotes.slice(0, 20).map((note) => sendRuntime({ type: "GET_WORD_NOTE", id: note.id }))
+      );
+      details.forEach((result) => {
+        const detail = result.status === "fulfilled" ? result.value?.detail : null;
+        if (detail?.word_note?.id) {
+          state.wordDetailsByID[String(detail.word_note.id)] = detail;
+        }
+      });
+      renderWordNotes();
+      if (showStatus) {
+        setStatus(`已加载 ${state.wordNotes.length} 条词语笔记。`, "success");
+      }
+    } catch (error) {
+      state.wordNotes = [];
+      renderWordNotes(error.message || String(error));
+      if (showStatus) {
+        setStatus(error.message || String(error), "error");
+      }
+    }
+  }
+
+  async function loadArticleWordNotes(showStatus = false) {
+    if (!state.article?.caixin_id) {
+      if (showStatus) {
+        setStatus("正在读取当前文章...", "muted");
+      }
+      try {
+        state.article = await readArticleFromActiveTab();
+        renderArticle();
+      } catch (error) {
+        state.articleWordNotes = [];
+        renderArticleWordNotes(error.message || String(error));
+        if (showStatus) {
+          setStatus(error.message || String(error), "error");
+        }
+        return;
+      }
+    }
+    const articleCaixinID = state.article?.caixin_id || "";
+    const tabCaixinID = extractCaixinIDFromURL(await activeTabURL());
+    const articleURLCaixinID = extractCaixinIDFromURL(state.article?.url);
+    const caixinIDs = [articleCaixinID, articleURLCaixinID, tabCaixinID].filter((id, index, ids) => id && ids.indexOf(id) === index);
+    if (caixinIDs.length === 0) {
+      renderArticleWordNotes("未能读取当前文章，请确认当前标签页已完成加载后刷新侧栏。");
+      return;
+    }
+    if (showStatus) {
+      setStatus("正在加载当前文章词语...", "muted");
+    }
+    try {
+      let notes = [];
+      let loadedCaixinID = caixinIDs[0];
+      for (const caixinID of caixinIDs) {
+        const response = await sendRuntime({
+          type: "LIST_ARTICLE_WORD_NOTES",
+          caixinID
+        });
+        notes = response.word_notes || [];
+        loadedCaixinID = caixinID;
+        if (notes.length > 0) {
+          break;
+        }
+      }
+      state.articleWordNotes = notes;
+      renderArticleWordNotes();
+      if (showStatus) {
+        setStatus(`当前文章词语已加载：${loadedCaixinID}，${notes.length} 个。`, "success");
+      }
+    } catch (error) {
+      state.articleWordNotes = [];
+      renderArticleWordNotes(error.message || String(error));
+      if (showStatus) {
+        setStatus(error.message || String(error), "error");
+      }
+    }
+  }
+
+  async function loadWordsPanel(showStatus = true) {
+    await Promise.allSettled([
+      loadArticleWordNotes(showStatus),
+      loadWordNotes(false)
+    ]);
+  }
+
+  async function saveManualWordNote(event) {
+    event.preventDefault();
+    if (!state.currentWordNote?.word_name) {
+      throw new Error("请先选择当前词语。");
+    }
+    const wordName = state.currentWordNote.word_name;
+    const form = event.currentTarget;
+    const wordExplanation = form.elements.wordExplanation.value.trim();
+    setStatus("正在保存词语含义...", "muted");
+    const response = await sendRuntime({
+      type: "SAVE_WORD_NOTE",
+      wordNote: {
+        word_name: wordName,
+        word_explanation: wordExplanation
+      }
+    });
+    await setCurrentWord(response.word_note || {
+      ...state.currentWordNote,
+      word_explanation: wordExplanation
+    });
+    await Promise.allSettled([
+      loadWordNotes(false),
+      loadArticleWordNotes(false)
+    ]);
+    setStatus("词语含义已保存。", "success");
+  }
+
+  async function openWordDetail(id) {
+    setStatus("正在选择词语...", "muted");
+    const response = await sendRuntime({ type: "GET_WORD_NOTE", id });
+    state.wordDetail = response.detail;
+    await setCurrentWord(response.detail?.word_note);
+    setStatus("已设为当前词语。", "success");
+  }
+
+  async function setCurrentWord(note) {
+    if (!note?.word_name) {
+      return;
+    }
+    state.currentWordNote = note;
+    await chrome.storage.local.set({ currentWordNote: note });
+    renderCurrentWord();
+  }
+
+  async function deleteWordNote(id) {
+    setStatus("正在删除词语笔记...", "muted");
+    await sendRuntime({ type: "DELETE_WORD_NOTE", id });
+    state.wordNotes = state.wordNotes.filter((note) => String(note.id) !== String(id));
+    state.articleWordNotes = state.articleWordNotes.filter((note) => String(note.id) !== String(id));
+    state.wordDetail = null;
+    if (String(state.currentWordNote?.id) === String(id)) {
+      state.currentWordNote = null;
+      await chrome.storage.local.remove("currentWordNote");
+    }
+    renderWordNotes();
+    renderArticleWordNotes();
+    renderCurrentWord();
+    renderWordDetail();
+    setStatus("词语笔记已删除。", "success");
+  }
+
+  async function generateCurrentWordExplanation() {
+    if (!state.currentWordNote?.word_name) {
+      throw new Error("请先选择当前词语。");
+    }
+    const article = requireArticle();
+    setStatus("正在生成词语含义...", "muted");
+    const context = (state.wordDetail?.sources || [])
+      .slice(0, 5)
+      .map((source) => `${source.prefix_text || ""}${source.selected_text || ""}${source.suffix_text || ""}`)
+      .join("\n\n");
+    const response = await sendRuntime({
+      type: "GENERATE_WORD_EXPLANATION",
+      wordName: state.currentWordNote.word_name,
+      article,
+      context: {
+        selectedText: state.currentWordNote.word_name,
+        prefixText: context,
+        suffixText: ""
+      }
+    });
+    $("[data-ecx-word-form]").elements.wordExplanation.value = response.word_explanation || "";
+    setStatus("含义已生成，请核验后提交。", "success");
+  }
+
   function renderMessages() {
     const container = $("[data-ecx-chat-messages]");
     if (state.messages.length === 0) {
@@ -470,6 +791,12 @@
     form.chatApiKey.value = settings.chatApiKey || "";
     form.chatModel.value = settings.chatModel || "";
     form.chatTemperature.value = settings.chatTemperature ?? "";
+  }
+
+  async function loadCurrentWordFromStorage() {
+    const stored = await chrome.storage.local.get({ currentWordNote: null });
+    state.currentWordNote = stored.currentWordNote;
+    renderCurrentWord();
   }
 
   async function saveSettingsFromForm() {
@@ -578,6 +905,9 @@
     if (name === "annotations") {
       loadAnnotations(true).catch((error) => setStatus(error.message || String(error), "error"));
     }
+    if (name === "words") {
+      loadWordsPanel(true).catch((error) => setStatus(error.message || String(error), "error"));
+    }
     if (name === "settings") {
       loadSettings().catch((error) => setStatus(error.message || String(error), "error"));
     }
@@ -618,6 +948,48 @@
         scrollToAnnotation(scrollButton.dataset.ecxScrollAnnotation).catch((error) => setStatus(error.message || String(error), "error"));
       }
     });
+    $("[data-ecx-word-search-form]").addEventListener("submit", (event) => {
+      event.preventDefault();
+      loadWordNotes(true).catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    $("[data-ecx-word-search-input]").addEventListener("input", (event) => {
+      if (event.currentTarget.value.trim()) {
+        return;
+      }
+      state.wordNotes = [];
+      state.wordDetailsByID = {};
+      renderWordNotes("输入词语后查询。");
+    });
+    $("[data-ecx-refresh-words]").addEventListener("click", () => loadWordsPanel(true).catch((error) => setStatus(error.message || String(error), "error")));
+    $("[data-ecx-word-form]").addEventListener("submit", (event) => {
+      saveManualWordNote(event).catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    $("[data-ecx-generate-word-explanation]").addEventListener("click", () => {
+      generateCurrentWordExplanation().catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    $("[data-ecx-article-word-list]").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-ecx-select-word]");
+      if (button) {
+        openWordDetail(button.dataset.ecxSelectWord).catch((error) => setStatus(error.message || String(error), "error"));
+      }
+    });
+    $("[data-ecx-word-list]").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-ecx-open-word]");
+      if (button) {
+        openWordDetail(button.dataset.ecxOpenWord).catch((error) => setStatus(error.message || String(error), "error"));
+      }
+    });
+    $("[data-ecx-word-list]").addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      const item = event.target.closest("[data-ecx-open-word]");
+      if (!item) {
+        return;
+      }
+      event.preventDefault();
+      openWordDetail(item.dataset.ecxOpenWord).catch((error) => setStatus(error.message || String(error), "error"));
+    });
     $("[data-ecx-chat-form]").addEventListener("submit", (event) => {
       submitQuestion(event).catch((error) => setStatus(error.message || String(error), "error"));
     });
@@ -629,6 +1001,18 @@
     $("[data-ecx-send-save-debug-request]").addEventListener("click", () => sendSaveDebugRequest());
     $("[data-ecx-build-debug-request]").addEventListener("click", () => buildDebugRequest());
     $("[data-ecx-send-debug-request]").addEventListener("click", () => sendDebugRequest());
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "local") {
+        return;
+      }
+      if (changes.currentWordNote) {
+        state.currentWordNote = changes.currentWordNote.newValue || null;
+        renderCurrentWord();
+      }
+      if (changes.wordNotesChangedAt) {
+        loadArticleWordNotes(false).catch((error) => setStatus(error.message || String(error), "error"));
+      }
+    });
   }
 
   bindEvents();
@@ -636,5 +1020,9 @@
   renderSearchResults("输入关键词搜索已保存的文章。");
   renderFavoriteList("尚未加载收藏列表。");
   renderAnnotations("尚未加载笔记与高亮。");
+  renderWordNotes("打开词语页后加载词语笔记。");
+  renderArticleWordNotes("打开词语页后加载当前文章词语。");
+  renderWordDetail();
+  loadCurrentWordFromStorage().catch((error) => setStatus(error.message || String(error), "error"));
   loadCurrentArticle();
 })();

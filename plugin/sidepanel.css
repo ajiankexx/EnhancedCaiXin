@@ -71,7 +71,7 @@ button:hover {
 
 .ecx-tabs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 4px;
   padding: 10px;
   border-bottom: 1px solid #edf1f7;
@@ -209,9 +209,17 @@ textarea {
 .ecx-favorite-folder-list,
 .ecx-favorite-list,
 .ecx-search-list,
+.ecx-word-list,
+.ecx-word-chip-list,
 .ecx-annotation-list {
   display: grid;
   gap: 8px;
+}
+
+.ecx-word-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 
 .ecx-favorite-folder-option {
@@ -233,6 +241,8 @@ textarea {
 
 .ecx-favorite-item,
 .ecx-search-item,
+.ecx-word-item,
+.ecx-word-source,
 .ecx-annotation-item,
 .ecx-empty {
   display: grid;
@@ -268,8 +278,69 @@ textarea {
   word-break: break-word;
 }
 
+.ecx-word-title {
+  color: #1255cc;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: left;
+  word-break: break-word;
+}
+
+.ecx-word-result {
+  cursor: pointer;
+  text-align: left;
+}
+
+.ecx-word-result:hover,
+.ecx-word-result:focus-visible {
+  border-color: #b8c7dc;
+  background: #f5f8fc;
+  outline: none;
+}
+
+.ecx-current-word {
+  min-height: 34px;
+  border: 1px solid #e1e6ef;
+  border-radius: 6px;
+  background: #fbfcfe;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.ecx-word-chip {
+  width: auto;
+  min-height: 20px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid #e1e6ef;
+  border-radius: 999px;
+  background: #fbfcfe;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.ecx-word-chip[aria-pressed="true"] {
+  border-color: #1255cc;
+  background: #edf4ff;
+  color: #1255cc;
+}
+
+.ecx-current-word {
+  display: grid;
+  align-items: center;
+  padding: 8px 10px;
+}
+
 .ecx-favorite-meta,
 .ecx-search-meta,
+.ecx-word-meta,
 .ecx-annotation-meta,
 .ecx-annotation-missing {
   color: #667085;
@@ -282,6 +353,30 @@ textarea {
   font-size: 13px;
   line-height: 1.55;
   word-break: break-word;
+}
+
+.ecx-word-explanation,
+.ecx-word-context {
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ecx-word-item .ecx-word-source {
+  gap: 4px;
+  border: 0;
+  border-left: 3px solid #d7e3f8;
+  border-radius: 0;
+  padding: 2px 0 2px 8px;
+  background: transparent;
+}
+
+.ecx-word-form,
+.ecx-word-detail {
+  display: grid;
+  gap: 8px;
 }
 
 .ecx-annotation-quote,
@@ -298,10 +393,12 @@ textarea {
 
 .ecx-annotation-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .ecx-annotation-actions button:last-child,
+[data-ecx-delete-word],
 [data-ecx-delete-favorite] {
   color: #b42318;
   border-color: #f2b8b5;

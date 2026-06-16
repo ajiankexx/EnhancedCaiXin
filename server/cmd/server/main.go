@@ -13,11 +13,12 @@ import (
 	"enhanced-caixin/server/internal/config"
 	"enhanced-caixin/server/internal/database"
 	"enhanced-caixin/server/internal/httpapi"
+	"enhanced-caixin/server/internal/logging"
 )
 
 func main() {
 	cfg := config.FromEnv()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+	logger := slog.New(logging.NewPrettyHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
@@ -36,7 +37,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewServer(database.NewArticleStore(db), database.NewAnnotationStore(db), database.NewFavoriteStore(db), logger),
+		Handler:           httpapi.NewServer(database.NewArticleStore(db), database.NewAnnotationStore(db), database.NewFavoriteStore(db), database.NewWordNoteStore(db), logger),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

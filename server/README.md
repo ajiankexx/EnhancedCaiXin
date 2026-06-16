@@ -19,12 +19,19 @@ http://127.0.0.1:1234
 - `POST /api/articles/{caixin_id}/favorite`: 收藏文章或更新所属收藏夹。
 - `DELETE /api/articles/{caixin_id}/favorite`: 取消收藏文章。
 - `GET /api/favorites`: 查询收藏列表，支持 `folder_id`、`limit`、`offset` 查询参数。
+- `GET /api/word-notes`: 查询词语笔记，支持 `q`、`limit`、`offset` 查询参数。
+- `POST /api/word-notes`: 手动新增或更新词语笔记。
+- `GET /api/word-notes/{id}`: 查询词语笔记详情和来源上下文。
+- `DELETE /api/word-notes/{id}`: 删除词语笔记。
+- `POST /api/articles/{caixin_id}/word-notes`: 从文章选区保存词语笔记和来源上下文。
 
 服务会把请求中的 `content` 写入数据库的 `content` 字段，并在首次保存时生成 `add_time` 作为文章进入数据库的时间。`reserved_3` 到 `reserved_5` 暂时保持为空。
 
 搜索功能使用 MySQL 8 的 InnoDB FULLTEXT ngram parser，适合本项目这种本地文章库。部署或升级数据库后需要执行 `sql/migrations/007_article_search.sql` 创建全文索引。
 
 收藏功能使用 `favorite_folders` 和 `article_favorite_folders` 两张表；同一篇文章可以收藏到多个收藏夹，默认收藏夹为 `默认收藏`。
+
+词语笔记功能使用 `word_notes` 和 `word_note_sources` 两张表；`word_name` 全局唯一，同一个词语可以关联多篇文章的选区上下文。部署或升级数据库后需要执行 `sql/migrations/008_word_notes.sql`。
 
 ## 运行
 

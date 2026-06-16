@@ -639,6 +639,50 @@
     setStatus(payload.type === "note" ? "笔记已创建。" : "高亮已创建。", "success");
   }
 
+  async function createTermFromSelection() {
+    const payload = annotationPayloadFromSelection();
+    const wordName = payload.selected_text.trim();
+    if (wordName.length > 80) {
+      throw new Error("术语名称过长，请缩短选中文本。");
+    }
+
+    const wordNote = { word_name: wordName, word_explanation: "" };
+    await chrome.storage.local.set({ currentWordNote: wordNote });
+    window.getSelection()?.removeAllRanges();
+    hideSelectionToolbar();
+    setStatus(`当前术语：${wordNote.word_name}`, "success");
+  }
+
+  async function addSelectionToCurrentTerm() {
+    const article = currentArticle();
+    const payload = annotationPayloadFromSelection();
+    const stored = await chrome.storage.local.get({ currentWordNote: null });
+    const wordNote = stored.currentWordNote;
+    if (!wordNote?.word_name) {
+      throw new Error("请先在侧栏词语页选择当前术语，或先把选中文本添加为术语。");
+    }
+
+    setStatus("正在保存术语关联文本...", "muted");
+    await window.EnhancedCaiXinSaveArticle.saveCurrentArticle();
+    await sendMessage({
+      type: "SAVE_ARTICLE_WORD_NOTE",
+      caixinID: article.caixin_id,
+      wordNote: {
+        word_name: wordNote.word_name,
+        word_explanation: wordNote.word_explanation || "",
+        selected_text: payload.selected_text,
+        prefix_text: payload.prefix_text,
+        suffix_text: payload.suffix_text,
+        start_offset: payload.start_offset,
+        end_offset: payload.end_offset
+      }
+    });
+    await chrome.storage.local.set({ wordNotesChangedAt: Date.now() });
+    window.getSelection()?.removeAllRanges();
+    hideSelectionToolbar();
+    setStatus(`已关联到：${wordNote.word_name}`, "success");
+  }
+
   async function deleteAnnotation(id) {
     setStatus("正在删除笔记/高亮...", "muted");
     await sendMessage({
@@ -717,7 +761,9 @@
     toolbar.hidden = true;
     toolbar.innerHTML = `
       <button type="button" data-ecx-create-highlight>高亮</button>
-      <button type="button" data-ecx-create-note>添加笔记</button>
+      <button type="button" data-ecx-create-note>笔记</button>
+      <button type="button" data-ecx-create-word-note>术语</button>
+      <button type="button" data-ecx-create-word-source>关联</button>
     `;
     document.documentElement.appendChild(toolbar);
     toolbar.querySelector("[data-ecx-create-highlight]").addEventListener("click", () => {
@@ -729,6 +775,12 @@
         return;
       }
       createAnnotationFromSelection(noteText.trim()).catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    toolbar.querySelector("[data-ecx-create-word-note]").addEventListener("click", () => {
+      createTermFromSelection().catch((error) => setStatus(error.message || String(error), "error"));
+    });
+    toolbar.querySelector("[data-ecx-create-word-source]").addEventListener("click", () => {
+      addSelectionToCurrentTerm().catch((error) => setStatus(error.message || String(error), "error"));
     });
     annotationState.toolbar = toolbar;
     return toolbar;
