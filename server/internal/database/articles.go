@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,12 @@ type Article struct {
 	Reserved5   *string    `json:"reserved_5,omitempty"`
 	CreatedAt   *time.Time `json:"created_at,omitempty"`
 	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
+}
+
+type ArticleSearchResult struct {
+	Article Article `json:"article"`
+	Snippet string  `json:"snippet,omitempty"`
+	Score   float64 `json:"score,omitempty"`
 }
 
 type ArticleStore struct {
@@ -90,6 +97,52 @@ WHERE caixin_id = ?
 	return nil
 }
 
+func (s *ArticleStore) Search(ctx context.Context, query string, limit int, offset int) ([]ArticleSearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []ArticleSearchResult{}, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	likeQuery := "%" + escapeLike(query) + "%"
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, caixin_id, url, title, author, catagory, publish_time,
+       content, add_time, reserved_3, reserved_4, reserved_5,
+       created_at, updated_at,
+       MATCH(title, author, catagory, content) AGAINST (? IN NATURAL LANGUAGE MODE) AS score
+FROM articles
+WHERE MATCH(title, author, catagory, content) AGAINST (? IN NATURAL LANGUAGE MODE)
+   OR title LIKE ? ESCAPE '\\'
+   OR author LIKE ? ESCAPE '\\'
+   OR catagory LIKE ? ESCAPE '\\'
+   OR content LIKE ? ESCAPE '\\'
+ORDER BY score DESC, publish_time DESC, id DESC
+LIMIT ? OFFSET ?
+`, query, query, likeQuery, likeQuery, likeQuery, likeQuery, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := make([]ArticleSearchResult, 0)
+	for rows.Next() {
+		result, err := scanArticleSearchResult(rows, query)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
 func (s *ArticleStore) findOne(ctx context.Context, where string, arg any) (Article, error) {
 	row := s.db.QueryRowContext(ctx, `
 SELECT id, caixin_id, url, title, author, catagory, publish_time,
@@ -100,10 +153,26 @@ WHERE `+where+`
 LIMIT 1
 `, arg)
 
+	article, err := scanArticle(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Article{}, ErrArticleNotFound
+		}
+		return Article{}, err
+	}
+
+	return article, nil
+}
+
+type articleScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanArticle(scanner articleScanner) (Article, error) {
 	var article Article
 	var author, catagory, content, reserved3, reserved4, reserved5 sql.NullString
 	var publishTime, addTime, createdAt, updatedAt sql.NullTime
-	if err := row.Scan(
+	if err := scanner.Scan(
 		&article.ID,
 		&article.CaixinID,
 		&article.URL,
@@ -119,9 +188,6 @@ LIMIT 1
 		&createdAt,
 		&updatedAt,
 	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Article{}, ErrArticleNotFound
-		}
 		return Article{}, err
 	}
 
@@ -137,6 +203,101 @@ LIMIT 1
 	article.UpdatedAt = timePtr(updatedAt)
 
 	return article, nil
+}
+
+func scanArticleSearchResult(scanner articleScanner, query string) (ArticleSearchResult, error) {
+	var article Article
+	var author, catagory, content, reserved3, reserved4, reserved5 sql.NullString
+	var publishTime, addTime, createdAt, updatedAt sql.NullTime
+	var score sql.NullFloat64
+	if err := scanner.Scan(
+		&article.ID,
+		&article.CaixinID,
+		&article.URL,
+		&article.Title,
+		&author,
+		&catagory,
+		&publishTime,
+		&content,
+		&addTime,
+		&reserved3,
+		&reserved4,
+		&reserved5,
+		&createdAt,
+		&updatedAt,
+		&score,
+	); err != nil {
+		return ArticleSearchResult{}, err
+	}
+
+	article.Author = stringPtr(author)
+	article.Catagory = stringPtr(catagory)
+	article.PublishTime = timePtr(publishTime)
+	article.AddTime = timePtr(addTime)
+	article.Reserved3 = stringPtr(reserved3)
+	article.Reserved4 = stringPtr(reserved4)
+	article.Reserved5 = stringPtr(reserved5)
+	article.CreatedAt = timePtr(createdAt)
+	article.UpdatedAt = timePtr(updatedAt)
+
+	return ArticleSearchResult{
+		Article: article,
+		Snippet: buildSnippet(content.String, query, 120),
+		Score:   score.Float64,
+	}, nil
+}
+
+func buildSnippet(content string, query string, radius int) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	query = strings.TrimSpace(query)
+	contentRunes := []rune(content)
+	if query == "" || len(contentRunes) <= radius*2 {
+		return string(contentRunes[:minInt(len(contentRunes), radius*2)])
+	}
+
+	lowerContent := strings.ToLower(content)
+	lowerQuery := strings.ToLower(query)
+	byteIndex := strings.Index(lowerContent, lowerQuery)
+	if byteIndex < 0 {
+		return string(contentRunes[:minInt(len(contentRunes), radius*2)])
+	}
+
+	runeIndex := len([]rune(content[:byteIndex]))
+	start := runeIndex - radius
+	if start < 0 {
+		start = 0
+	}
+	end := runeIndex + len([]rune(query)) + radius
+	if end > len(contentRunes) {
+		end = len(contentRunes)
+	}
+
+	prefix := ""
+	if start > 0 {
+		prefix = "..."
+	}
+	suffix := ""
+	if end < len(contentRunes) {
+		suffix = "..."
+	}
+	return prefix + string(contentRunes[start:end]) + suffix
+}
+
+func escapeLike(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `%`, `\%`)
+	value = strings.ReplaceAll(value, `_`, `\_`)
+	return value
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func stringPtr(value sql.NullString) *string {

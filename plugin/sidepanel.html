@@ -18,6 +18,7 @@
 
       <nav class="ecx-tabs" aria-label="功能">
         <button type="button" data-ecx-tab="article" aria-pressed="true">文章</button>
+        <button type="button" data-ecx-tab="search" aria-pressed="false">搜索</button>
         <button type="button" data-ecx-tab="favorites" aria-pressed="false">收藏</button>
         <button type="button" data-ecx-tab="chat" aria-pressed="false">对话</button>
         <button type="button" data-ecx-tab="annotations" aria-pressed="false">笔记</button>
@@ -34,6 +35,14 @@
           <div><dt>发布时间</dt><dd data-ecx-current-time>-</dd></div>
           <div><dt>文章 ID</dt><dd data-ecx-current-id>-</dd></div>
         </dl>
+      </section>
+
+      <section class="ecx-panel" data-ecx-panel="search" hidden>
+        <form class="ecx-inline-form" data-ecx-search-form>
+          <input type="search" data-ecx-search-input placeholder="搜索标题、作者、分类或正文">
+          <button type="submit">搜索</button>
+        </form>
+        <div class="ecx-search-list" data-ecx-search-list></div>
       </section>
 
       <section class="ecx-panel" data-ecx-panel="favorites" hidden>

@@ -10,6 +10,7 @@ http://127.0.0.1:1234
 
 - `GET /healthz`: 健康检查。
 - `POST /api/articles`: 保存文章，供插件默认配置调用；如果 `caixin_id` 已存在，则直接返回已有记录，不重复写入。
+- `GET /api/articles/search`: 搜索已保存文章，支持 `q`、`limit`、`offset` 查询参数；会匹配标题、作者、分类和正文。
 - `GET /api/articles/{caixin_id}`: 按财新文章 ID 查询文章。
 - `DELETE /api/articles/{caixin_id}`: 删除文章数据库记录；收藏关联和笔记会随外键级联删除。
 - `GET /api/favorite-folders`: 查询收藏夹。
@@ -20,6 +21,8 @@ http://127.0.0.1:1234
 - `GET /api/favorites`: 查询收藏列表，支持 `folder_id`、`limit`、`offset` 查询参数。
 
 服务会把请求中的 `content` 写入数据库的 `content` 字段，并在首次保存时生成 `add_time` 作为文章进入数据库的时间。`reserved_3` 到 `reserved_5` 暂时保持为空。
+
+搜索功能使用 MySQL 8 的 InnoDB FULLTEXT ngram parser，适合本项目这种本地文章库。部署或升级数据库后需要执行 `sql/migrations/007_article_search.sql` 创建全文索引。
 
 收藏功能使用 `favorite_folders` 和 `article_favorite_folders` 两张表；同一篇文章可以收藏到多个收藏夹，默认收藏夹为 `默认收藏`。
 

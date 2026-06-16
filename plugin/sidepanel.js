@@ -5,6 +5,7 @@
     folders: [],
     articleFavorite: null,
     favorites: [],
+    searchResults: [],
     annotations: [],
     selectedListFolderId: "",
     messages: []
@@ -195,6 +196,56 @@
         </article>
       `;
     }).join("");
+  }
+
+  function renderSearchResults(message = "") {
+    const list = $("[data-ecx-search-list]");
+    if (message) {
+      list.innerHTML = `<div class="ecx-empty">${escapeHTML(message)}</div>`;
+      return;
+    }
+    if (state.searchResults.length === 0) {
+      list.innerHTML = '<div class="ecx-empty">暂无搜索结果。</div>';
+      return;
+    }
+    list.innerHTML = state.searchResults.map((result) => {
+      const article = result.article || {};
+      const meta = [
+        article.catagory,
+        article.author,
+        formatDate(article.publish_time)
+      ].filter(Boolean).map(escapeHTML).join(" · ");
+      return `
+        <article class="ecx-search-item">
+          <a class="ecx-search-title" href="${escapeHTML(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(article.title || article.url || "未命名文章")}</a>
+          ${meta ? `<div class="ecx-search-meta">${meta}</div>` : ""}
+          ${result.snippet ? `<div class="ecx-search-snippet">${escapeHTML(result.snippet)}</div>` : ""}
+        </article>
+      `;
+    }).join("");
+  }
+
+  async function searchArticles() {
+    const input = $("[data-ecx-search-input]");
+    const query = input.value.trim();
+    if (!query) {
+      throw new Error("请输入搜索关键词。");
+    }
+    renderSearchResults("正在搜索文章...");
+    setStatus("正在搜索文章...", "muted");
+    try {
+      const response = await sendRuntime({
+        type: "SEARCH_ARTICLES",
+        options: { query, limit: 50, offset: 0 }
+      });
+      state.searchResults = response.results || [];
+      renderSearchResults();
+      setStatus(`找到 ${state.searchResults.length} 篇相关文章。`, "success");
+    } catch (error) {
+      state.searchResults = [];
+      renderSearchResults(error.message || String(error));
+      setStatus(error.message || String(error), "error");
+    }
   }
 
   async function loadFavoriteFolders() {
@@ -538,6 +589,10 @@
     });
     $("[data-ecx-refresh]").addEventListener("click", () => loadCurrentArticle());
     $("[data-ecx-save]").addEventListener("click", () => saveArticle().catch((error) => setStatus(error.message || String(error), "error")));
+    $("[data-ecx-search-form]").addEventListener("submit", (event) => {
+      event.preventDefault();
+      searchArticles().catch((error) => setStatus(error.message || String(error), "error"));
+    });
     $("[data-ecx-refresh-favorites]").addEventListener("click", () => loadFavoritesPanel().catch((error) => setStatus(error.message || String(error), "error")));
     $("[data-ecx-save-favorite]").addEventListener("click", () => saveFavoriteSelection().catch((error) => setStatus(error.message || String(error), "error")));
     $("[data-ecx-delete-favorite]").addEventListener("click", () => deleteArticleFavorite().catch((error) => setStatus(error.message || String(error), "error")));
@@ -578,6 +633,7 @@
 
   bindEvents();
   renderMessages();
+  renderSearchResults("输入关键词搜索已保存的文章。");
   renderFavoriteList("尚未加载收藏列表。");
   renderAnnotations("尚未加载笔记与高亮。");
   loadCurrentArticle();

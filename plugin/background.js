@@ -179,6 +179,29 @@ async function listFavorites(options = {}) {
   return data;
 }
 
+async function searchArticles(options = {}) {
+  const settings = await getSettings();
+  const query = String(options.query || "").trim();
+  if (!query) {
+    throw new Error("请输入搜索关键词。");
+  }
+
+  const params = new URLSearchParams({ q: query });
+  if (options.limit) {
+    params.set("limit", String(options.limit));
+  }
+  if (options.offset) {
+    params.set("offset", String(options.offset));
+  }
+  const endpoint = `${apiEndpointBase(settings)}/articles/search?${params.toString()}`;
+  const response = await fetch(endpoint);
+  const data = await parseJSONResponse(response);
+  if (!response.ok) {
+    throw new Error(data?.error || `搜索文章失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
 async function parseJSONResponse(response) {
   const text = await response.text();
   if (!text) {
@@ -395,6 +418,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
     if (message.type === "LIST_FAVORITES") {
       return listFavorites(message.options || {});
+    }
+    if (message.type === "SEARCH_ARTICLES") {
+      return searchArticles(message.options || {});
     }
     if (message.type === "BUILD_SAVE_ARTICLE_REQUEST") {
       const settings = await getSettings();

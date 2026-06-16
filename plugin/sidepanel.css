@@ -71,7 +71,7 @@ button:hover {
 
 .ecx-tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 4px;
   padding: 10px;
   border-bottom: 1px solid #edf1f7;
@@ -208,6 +208,7 @@ textarea {
 
 .ecx-favorite-folder-list,
 .ecx-favorite-list,
+.ecx-search-list,
 .ecx-annotation-list {
   display: grid;
   gap: 8px;
@@ -231,6 +232,7 @@ textarea {
 }
 
 .ecx-favorite-item,
+.ecx-search-item,
 .ecx-annotation-item,
 .ecx-empty {
   display: grid;
@@ -257,12 +259,29 @@ textarea {
   word-break: break-word;
 }
 
+.ecx-search-title {
+  color: #1255cc;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-decoration: none;
+  word-break: break-word;
+}
+
 .ecx-favorite-meta,
+.ecx-search-meta,
 .ecx-annotation-meta,
 .ecx-annotation-missing {
   color: #667085;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.ecx-search-snippet {
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-word;
 }
 
 .ecx-annotation-quote,

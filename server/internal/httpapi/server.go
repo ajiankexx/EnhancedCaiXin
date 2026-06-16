@@ -38,6 +38,7 @@ func NewServer(articles *database.ArticleStore, annotations *database.Annotation
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.HandleFunc("POST /api/articles", s.handleCreateArticle)
+	s.mux.HandleFunc("GET /api/articles/search", s.handleSearchArticles)
 	s.mux.HandleFunc("GET /api/articles/{caixinID}", s.handleGetArticle)
 	s.mux.HandleFunc("DELETE /api/articles/{caixinID}", s.handleDeleteArticle)
 	s.mux.HandleFunc("GET /api/articles/{caixinID}/annotations", s.handleListAnnotations)
@@ -131,6 +132,42 @@ func (s *Server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
 		"article": article,
+	})
+}
+
+func (s *Server) handleSearchArticles(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		writeError(w, http.StatusBadRequest, "q is required")
+		return
+	}
+	if len([]rune(query)) > 128 {
+		writeError(w, http.StatusBadRequest, "q is too long")
+		return
+	}
+
+	limit, err := parseIntQuery(r, "limit", 50)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "limit must be an integer")
+		return
+	}
+	offset, err := parseIntQuery(r, "offset", 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "offset must be an integer")
+		return
+	}
+
+	results, err := s.articles.Search(r.Context(), query, limit, offset)
+	if err != nil {
+		s.logger.Error("search articles failed", "error", err, "query", query, "limit", limit, "offset", offset)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"query":   query,
+		"results": results,
 	})
 }
 
