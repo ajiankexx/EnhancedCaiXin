@@ -31,6 +31,11 @@ button:hover {
   background: #f6f9ff;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .ecx-sidepanel {
   display: grid;
   grid-template-rows: auto auto auto 1fr;
@@ -126,6 +131,23 @@ button:hover {
   border-color: transparent;
   background: #1255cc;
   color: #ffffff;
+}
+
+.ecx-primary-button:hover,
+.ecx-primary-button:focus-visible {
+  background: #0f46a8;
+  color: #ffffff;
+}
+
+.ecx-danger-button {
+  border-color: #f3b7b3;
+  color: #b42318;
+}
+
+.ecx-danger-button:hover:not(:disabled),
+.ecx-danger-button:focus-visible:not(:disabled) {
+  background: #fff1f0;
+  color: #912018;
 }
 
 .ecx-article-meta {
@@ -300,14 +322,22 @@ textarea {
 }
 
 .ecx-current-word {
-  min-height: 34px;
+  display: grid;
+  gap: 6px;
   border: 1px solid #e1e6ef;
   border-radius: 6px;
+  padding: 8px;
   background: #fbfcfe;
   color: #344054;
+}
+
+.ecx-current-word span {
   font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.ecx-current-word input {
   word-break: break-word;
 }
 

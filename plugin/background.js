@@ -39,6 +39,23 @@ async function saveArticle(article) {
   }
 }
 
+async function getArticle(caixinID) {
+  const settings = await getSettings();
+  const endpoint = `${apiEndpointBase(settings)}/articles/${encodeURIComponent(caixinID)}`;
+  const response = await fetch(endpoint);
+  const data = await parseJSONResponse(response);
+  if (response.status === 404) {
+    return { saved: false, article: null };
+  }
+  if (!response.ok) {
+    throw new Error(data?.error || `查询文章保存状态失败：HTTP ${response.status}`);
+  }
+  return {
+    saved: Boolean(data?.article),
+    article: data?.article || null
+  };
+}
+
 function annotationEndpointBase(settings) {
   const endpoint = (settings.articleSaveEndpoint || DEFAULTS.articleSaveEndpoint || "").replace(/\/+$/, "");
   if (!endpoint) {
@@ -528,6 +545,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === "SAVE_ARTICLE") {
       return saveArticle(message.article);
     }
+    if (message.type === "GET_ARTICLE") {
+      return getArticle(message.caixinID);
+    }
     if (message.type === "LIST_ANNOTATIONS") {
       return listAnnotations(message.caixinID);
     }
@@ -549,7 +569,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === "SAVE_ARTICLE_FAVORITE") {
       return saveArticleFavorite(message.caixinID, message.folderIDs);
     }
-    if (message.type === "DELETE_ARTICLE_FAVORITE") {
+    if (message.type === "DELETE_ARTICLE" || message.type === "DELETE_ARTICLE_FAVORITE") {
       return deleteArticleFavorite(message.caixinID);
     }
     if (message.type === "LIST_FAVORITES") {

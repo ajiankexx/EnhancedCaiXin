@@ -2,6 +2,7 @@
   const state = {
     activeTabId: null,
     article: null,
+    articleSaveStatus: null,
     folders: [],
     articleFavorite: null,
     favorites: [],
@@ -135,12 +136,15 @@
 
   async function loadCurrentArticle() {
     state.article = null;
+    state.articleSaveStatus = null;
 
     try {
       state.article = await readArticleFromActiveTab();
+      state.articleSaveStatus = { loading: true };
       renderArticle();
       setStatus("已读取当前文章。", "success");
       await Promise.allSettled([
+        loadArticleSaveStatus(false),
         loadArticleFavorite(false),
         loadAnnotations(false),
         loadArticleWordNotes(false)
@@ -157,9 +161,72 @@
     const article = state.article || {};
     $("[data-ecx-article-title]").textContent = message || article.title || "请切换到财新文章页后刷新侧栏。";
     $("[data-ecx-current-title]").textContent = article.title || "-";
+    $("[data-ecx-current-catagory]").textContent = article.catagory || "-";
     $("[data-ecx-current-author]").textContent = article.author || "-";
     $("[data-ecx-current-time]").textContent = formatDate(article.publish_time) || "-";
     $("[data-ecx-current-id]").textContent = article.caixin_id || "-";
+    $("[data-ecx-current-save-status]").textContent = formatArticleSaveStatus();
+    renderArticleActions();
+  }
+
+  function renderArticleActions() {
+    const hasArticle = Boolean(state.article?.caixin_id);
+    const saveButton = $("[data-ecx-save]");
+    const unsaveButton = $("[data-ecx-unsave]");
+    if (saveButton) {
+      saveButton.disabled = !hasArticle;
+    }
+    if (unsaveButton) {
+      unsaveButton.disabled = !hasArticle || state.articleSaveStatus?.saved !== true;
+    }
+  }
+
+  function formatArticleSaveStatus() {
+    if (!state.article?.caixin_id) {
+      return "-";
+    }
+    if (state.articleSaveStatus?.loading) {
+      return "正在查询...";
+    }
+    if (state.articleSaveStatus?.saved) {
+      return "已保存";
+    }
+    if (state.articleSaveStatus?.saved === false) {
+      return "未保存";
+    }
+    if (state.articleSaveStatus?.error) {
+      return "查询失败";
+    }
+    return "-";
+  }
+
+  async function loadArticleSaveStatus(showStatus = true) {
+    const article = requireArticle();
+    state.articleSaveStatus = { loading: true };
+    renderArticle();
+    if (showStatus) {
+      setStatus("正在查询文章保存状态...", "muted");
+    }
+    try {
+      const response = await sendRuntime({
+        type: "GET_ARTICLE",
+        caixinID: article.caixin_id
+      });
+      state.articleSaveStatus = {
+        saved: Boolean(response?.saved),
+        article: response?.article || null
+      };
+      renderArticle();
+      if (showStatus) {
+        setStatus(state.articleSaveStatus.saved ? "当前文章已保存到 MySQL。" : "当前文章尚未保存到 MySQL。", "success");
+      }
+    } catch (error) {
+      state.articleSaveStatus = { saved: null, error: error.message || String(error) };
+      renderArticle();
+      if (showStatus) {
+        setStatus(error.message || String(error), "error");
+      }
+    }
   }
 
   async function saveArticle() {
@@ -169,8 +236,25 @@
     }
     setStatus("正在保存当前文章...", "muted");
     const response = await sendRuntime({ type: "SAVE_ARTICLE", article });
+    state.articleSaveStatus = { saved: true, article: response?.article || null };
+    renderArticle();
     setStatus(response?.message || "文章已提交保存接口。", "success");
     return response;
+  }
+
+  async function unsaveArticle() {
+    const article = requireArticle();
+    setStatus("正在取消保存文章...", "muted");
+    await sendRuntime({
+      type: "DELETE_ARTICLE",
+      caixinID: article.caixin_id
+    });
+    state.articleSaveStatus = { saved: false, article: null };
+    state.articleFavorite = { favorited: false, folders: [] };
+    renderArticle();
+    renderFavoriteFolderOptions();
+    await loadFavoriteList();
+    setStatus("文章已取消保存。", "success");
   }
 
   function renderFavoriteFolderOptions() {
@@ -346,16 +430,7 @@
   }
 
   async function deleteArticleFavorite() {
-    const article = requireArticle();
-    setStatus("正在删除文章...", "muted");
-    await sendRuntime({
-      type: "DELETE_ARTICLE_FAVORITE",
-      caixinID: article.caixin_id
-    });
-    state.articleFavorite = { favorited: false, folders: [] };
-    renderFavoriteFolderOptions();
-    await loadFavoriteList();
-    setStatus("文章已从数据库删除。", "success");
+    await unsaveArticle();
   }
 
   async function createFavoriteFolder() {
@@ -463,7 +538,7 @@
           ${sources.length === 0 ? "" : sources.map((source) => {
             const article = source.article || {};
             const title = article.title || source.caixin_id || "未知文章";
-            const context = `${source.prefix_text || ""}${source.selected_text || ""}${source.suffix_text || ""}`;
+            const context = source.selected_text || "";
             return `
               <article class="ecx-word-source">
                 <div class="ecx-word-meta">${escapeHTML(title)}</div>
@@ -494,14 +569,17 @@
   }
 
   function renderCurrentWord() {
-    const label = $("[data-ecx-current-word]");
+    const status = $("[data-ecx-current-word-status]");
+    const input = $("[data-ecx-current-word]");
     const form = $("[data-ecx-word-form]");
     if (!state.currentWordNote) {
-      label.textContent = "未选择当前词语";
+      status.textContent = "未选择当前词语";
+      input.value = "";
       form.elements.wordExplanation.value = "";
       return;
     }
-    label.textContent = `当前词语：${state.currentWordNote.word_name}`;
+    status.textContent = state.currentWordNote.id ? "当前词语" : "待入库";
+    input.value = state.currentWordNote.word_name || "";
     form.elements.wordExplanation.value = state.currentWordNote.word_explanation || "";
     renderArticleWordNotes();
   }
@@ -533,7 +611,7 @@
         const title = article.url
           ? `<a href="${escapeHTML(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(article.title || article.url)}</a>`
           : escapeHTML(article.title || source.caixin_id || "未知文章");
-        const context = `${source.prefix_text || ""}${source.selected_text || ""}${source.suffix_text || ""}`;
+        const context = source.selected_text || "";
         return `
           <article class="ecx-word-source">
             <div class="ecx-word-meta">${title}</div>
@@ -652,11 +730,11 @@
 
   async function saveManualWordNote(event) {
     event.preventDefault();
-    if (!state.currentWordNote?.word_name) {
-      throw new Error("请先选择当前词语。");
-    }
-    const wordName = state.currentWordNote.word_name;
     const form = event.currentTarget;
+    const wordName = form.elements.wordName.value.trim();
+    if (!wordName) {
+      throw new Error("请先选择或输入词语。");
+    }
     const wordExplanation = form.elements.wordExplanation.value.trim();
     setStatus("正在保存词语含义...", "muted");
     const response = await sendRuntime({
@@ -694,6 +772,27 @@
     renderCurrentWord();
   }
 
+  async function updateCurrentWordFromInput(event) {
+    const wordName = event.currentTarget.value.trim();
+    if (!wordName) {
+      state.currentWordNote = null;
+      await chrome.storage.local.remove("currentWordNote");
+      renderCurrentWord();
+      return;
+    }
+    const previous = state.currentWordNote || {};
+    const next = {
+      word_name: wordName,
+      word_explanation: $("[data-ecx-word-form]").elements.wordExplanation.value.trim()
+    };
+    if (previous.id && previous.word_name === wordName) {
+      next.id = previous.id;
+    }
+    state.currentWordNote = next;
+    await chrome.storage.local.set({ currentWordNote: next });
+    renderCurrentWord();
+  }
+
   async function deleteWordNote(id) {
     setStatus("正在删除词语笔记...", "muted");
     await sendRuntime({ type: "DELETE_WORD_NOTE", id });
@@ -712,8 +811,9 @@
   }
 
   async function generateCurrentWordExplanation() {
-    if (!state.currentWordNote?.word_name) {
-      throw new Error("请先选择当前词语。");
+    const wordName = $("[data-ecx-word-form]").elements.wordName.value.trim();
+    if (!wordName) {
+      throw new Error("请先选择或输入词语。");
     }
     const article = requireArticle();
     setStatus("正在生成词语含义...", "muted");
@@ -723,10 +823,10 @@
       .join("\n\n");
     const response = await sendRuntime({
       type: "GENERATE_WORD_EXPLANATION",
-      wordName: state.currentWordNote.word_name,
+      wordName,
       article,
       context: {
-        selectedText: state.currentWordNote.word_name,
+        selectedText: wordName,
         prefixText: context,
         suffixText: ""
       }
@@ -781,6 +881,19 @@
       setStatus(error.message || String(error), "error");
     }
     renderMessages();
+  }
+
+  function submitChatOnEnter(event) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    const form = event.currentTarget.closest("form");
+    if (form?.requestSubmit) {
+      form.requestSubmit();
+      return;
+    }
+    form?.querySelector('button[type="submit"]')?.click();
   }
 
   async function loadSettings() {
@@ -919,6 +1032,7 @@
     });
     $("[data-ecx-refresh]").addEventListener("click", () => loadCurrentArticle());
     $("[data-ecx-save]").addEventListener("click", () => saveArticle().catch((error) => setStatus(error.message || String(error), "error")));
+    $("[data-ecx-unsave]").addEventListener("click", () => unsaveArticle().catch((error) => setStatus(error.message || String(error), "error")));
     $("[data-ecx-search-form]").addEventListener("submit", (event) => {
       event.preventDefault();
       searchArticles().catch((error) => setStatus(error.message || String(error), "error"));
@@ -960,6 +1074,9 @@
       state.wordDetailsByID = {};
       renderWordNotes("输入词语后查询。");
     });
+    $("[data-ecx-current-word]").addEventListener("change", (event) => {
+      updateCurrentWordFromInput(event).catch((error) => setStatus(error.message || String(error), "error"));
+    });
     $("[data-ecx-refresh-words]").addEventListener("click", () => loadWordsPanel(true).catch((error) => setStatus(error.message || String(error), "error")));
     $("[data-ecx-word-form]").addEventListener("submit", (event) => {
       saveManualWordNote(event).catch((error) => setStatus(error.message || String(error), "error"));
@@ -993,6 +1110,7 @@
     $("[data-ecx-chat-form]").addEventListener("submit", (event) => {
       submitQuestion(event).catch((error) => setStatus(error.message || String(error), "error"));
     });
+    $("[data-ecx-chat-input]").addEventListener("keydown", submitChatOnEnter);
     $("[data-ecx-settings-form]").addEventListener("submit", (event) => {
       event.preventDefault();
       saveSettingsFromForm().catch((error) => setStatus(error.message || String(error), "error"));

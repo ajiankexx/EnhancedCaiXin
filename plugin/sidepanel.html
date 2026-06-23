@@ -29,12 +29,17 @@
       <div class="ecx-status" data-ecx-status data-tone="muted">等待操作。</div>
 
       <section class="ecx-panel" data-ecx-panel="article">
-        <button class="ecx-primary-button" type="button" data-ecx-save>保存当前文章到 MySQL</button>
+        <div class="ecx-two-columns">
+          <button class="ecx-primary-button" type="button" data-ecx-save>保存当前文章到 MySQL</button>
+          <button class="ecx-danger-button" type="button" data-ecx-unsave disabled>取消保存</button>
+        </div>
         <dl class="ecx-article-meta">
           <div><dt>标题</dt><dd data-ecx-current-title>-</dd></div>
+          <div><dt>类别</dt><dd data-ecx-current-catagory>-</dd></div>
           <div><dt>作者</dt><dd data-ecx-current-author>-</dd></div>
           <div><dt>发布时间</dt><dd data-ecx-current-time>-</dd></div>
           <div><dt>文章 ID</dt><dd data-ecx-current-id>-</dd></div>
+          <div><dt>MySQL 保存状态</dt><dd data-ecx-current-save-status>-</dd></div>
         </dl>
       </section>
 
@@ -71,7 +76,10 @@
 
       <section class="ecx-panel" data-ecx-panel="words" hidden>
         <form class="ecx-word-form" data-ecx-word-form>
-          <div class="ecx-current-word" data-ecx-current-word>未选择当前词语</div>
+          <div class="ecx-current-word">
+            <span data-ecx-current-word-status>未选择当前词语</span>
+            <input name="wordName" data-ecx-current-word type="text" placeholder="输入或选择词语">
+          </div>
           <textarea name="wordExplanation" rows="5" placeholder="输入含义，或先用 LLM 生成后人工核验"></textarea>
           <div class="ecx-two-columns">
             <button type="button" data-ecx-generate-word-explanation>LLM 生成</button>

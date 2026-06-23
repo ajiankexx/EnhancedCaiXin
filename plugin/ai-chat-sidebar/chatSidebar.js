@@ -46,6 +46,7 @@
     document.documentElement.appendChild(sidebar);
     sidebar.querySelector("[data-ecx-close-chat]").addEventListener("click", close);
     sidebar.querySelector("[data-ecx-chat-form]").addEventListener("submit", submitQuestion);
+    sidebar.querySelector("[data-ecx-chat-input]").addEventListener("keydown", submitChatOnEnter);
     renderMessages();
     return sidebar;
   }
@@ -107,6 +108,19 @@
       };
     }
     renderMessages();
+  }
+
+  function submitChatOnEnter(event) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    const form = event.currentTarget.closest("form");
+    if (form?.requestSubmit) {
+      form.requestSubmit();
+      return;
+    }
+    form?.querySelector('button[type="submit"]')?.click();
   }
 
   function open() {
